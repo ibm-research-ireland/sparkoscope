@@ -30,6 +30,7 @@
 
 # Options for the daemons used in the standalone deploy mode
 # - SPARK_MASTER_IP, to bind the master to a different IP address or hostname
+SPARK_MASTER_IP=127.0.0.1
 # - SPARK_MASTER_PORT / SPARK_MASTER_WEBUI_PORT, to use non-default ports for the master
 # - SPARK_MASTER_OPTS, to set config properties only for the master (e.g. "-Dx=y")
 # - SPARK_WORKER_CORES, to set the number of cores to use on this machine
@@ -41,6 +42,8 @@
 # - SPARK_HISTORY_OPTS, to set config properties only for the history server (e.g. "-Dx=y")
 # - SPARK_SHUFFLE_OPTS, to set config properties only for the external shuffle service (e.g. "-Dx=y")
 # - SPARK_DAEMON_JAVA_OPTS, to set config properties for all daemons (e.g. "-Dx=y")
+#CHANGE TO THE APPROPRIATE DIRECTORY
+SPARK_DAEMON_JAVA_OPTS="-Djava.library.path=/home/johngouf/Desktop/hyperic-sigar-1.6.4/sigar-bin/lib/"
 # - SPARK_PUBLIC_DNS, to set the public dns name of the master or workers
 
 # Generic options for the daemons used in the standalone deploy mode

@@ -108,6 +108,11 @@
       <groupId>org.apache.curator</groupId>
       <artifactId>curator-recipes</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.fusesource</groupId>
+      <artifactId>sigar</artifactId>
+      <version>1.6.4</version>
+    </dependency>
 
     <!-- Jetty dependencies promoted to compile here so they are shaded
          and inlined into spark-core jar -->
