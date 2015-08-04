@@ -65,9 +65,9 @@ import org.apache.spark.metrics.source.Source
  * [options] is the specific property of this source or sink.
  */
 private[spark] class MetricsSystem private (
-    val instance: String,
-    conf: SparkConf,
-    securityMgr: SecurityManager)
+                                             val instance: String,
+                                             conf: SparkConf,
+                                             securityMgr: SecurityManager)
   extends Logging {
 
   private[this] val confFile = conf.get("spark.metrics.conf", null)
@@ -183,13 +183,23 @@ private[spark] class MetricsSystem private (
       val classPath = kv._2.getProperty("class")
       if (null != classPath) {
         try {
-          val sink = Class.forName(classPath)
-            .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-            .newInstance(kv._2, registry, securityMgr)
-          if (kv._1 == "servlet") {
-            metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
-          } else {
-            sinks += sink.asInstanceOf[Sink]
+          var sink : Option[Sink] = None
+          if(classPath.contains("SigarSink"))
+          {
+            sink = Some(Class.forName(classPath)
+              .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager], classOf[SparkConf])
+              .newInstance(kv._2, registry, securityMgr, conf).asInstanceOf[Sink])
+            sinks += sink.get
+          } else if (kv._1 == "servlet") {
+            metricsServlet = Some(Class.forName(classPath)
+              .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+              .newInstance(kv._2, registry, securityMgr).asInstanceOf[MetricsServlet])
+          }
+          else {
+            sink =Some(Class.forName(classPath)
+              .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+              .newInstance(kv._2, registry, securityMgr).asInstanceOf[Sink])
+            sinks += sink.get
           }
         } catch {
           case e: Exception => {
@@ -218,7 +228,7 @@ private[spark] object MetricsSystem {
   }
 
   def createMetricsSystem(
-      instance: String, conf: SparkConf, securityMgr: SecurityManager): MetricsSystem = {
+                           instance: String, conf: SparkConf, securityMgr: SecurityManager): MetricsSystem = {
     new MetricsSystem(instance, conf, securityMgr)
   }
 }

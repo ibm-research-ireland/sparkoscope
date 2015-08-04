@@ -3,24 +3,33 @@ package org.apache.spark.metrics.sink
 /**
  * Created by johngouf on 27/07/15.
  */
-import java.io.{FileWriter, File}
+import java.io._
+import java.net.URI
 import java.util.concurrent.{ThreadFactory, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Date, Locale, Properties}
 
-import com.codahale.metrics.{CsvReporter, MetricRegistry}
-import org.apache.spark.SecurityManager
+import com.codahale.metrics.{Metric, CsvReporter, MetricRegistry}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.fs.{FSDataOutputStream, Path, FileSystem}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.{SparkConf, SecurityManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
 import org.hyperic.sigar.Sigar
+import org.json4s.jackson.JsonMethods._
 
+import scala.collection.mutable.ListBuffer
 
 
 private[spark] class SigarSink(val property: Properties, val registry: MetricRegistry,
-                               securityMgr: SecurityManager) extends Sink {
+                               securityMgr: SecurityManager, config: SparkConf) extends Sink {
 
   case class NetworkMetrics(bytesRx: Long, bytesTx: Long)
   case class AverageNetworkMetrics(bytesRxPerSecond: Double, bytesTxPerSecond: Double)
+
+
 
   val CSV_DEFAULT_DIR = "/tmp/";
 
@@ -33,10 +42,7 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
 
   val localhost = Utils.localHostName();
 
-  val file = new File(CSV_DEFAULT_DIR+localhost+"-network.txt");
-  if(file.exists()) file.delete();
-
-  val fw = new FileWriter(file, true)
+  var entries = new ListBuffer[String]();
 
   def getNetworkMetrics(): NetworkMetrics = {
     var bytesReceived = 0L;
@@ -57,6 +63,24 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
     AverageNetworkMetrics(bytesRxPerSecond, bytesTxPerSecond);
   }
 
+  val conf : Configuration = new Configuration()
+  val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
+
+  val path = new Path("hdfs://localhost:9000/spark-logs/"+localhost+"-network")
+  val fileSystem = Utils.getHadoopFileSystem(new URI("hdfs://localhost:9000/spark-logs/"), conf)
+
+  var hadoopDataStream: Option[FSDataOutputStream] = None
+
+  val dstream = {
+    hadoopDataStream = Some(fileSystem.create(path))
+    hadoopDataStream.get
+  }
+
+  val bstream = new BufferedOutputStream(dstream, outputBufferSize)
+
+  var writer: Option[PrintWriter] = None
+  writer = Some(new PrintWriter(bstream))
+
   override def start() {
 
     executor.scheduleAtFixedRate(new Runnable(){
@@ -68,9 +92,7 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
 
         val averageNetworkMetrics: AverageNetworkMetrics = getAverageNetworkMetric(initialMetrics,newMetrics);
 
-        fw.write(date.getTime+","+averageNetworkMetrics.bytesRxPerSecond+","+averageNetworkMetrics.bytesTxPerSecond);
-        fw.write("\n");
-        fw.flush();
+        entries += (date.getTime+","+averageNetworkMetrics.bytesRxPerSecond+","+averageNetworkMetrics.bytesTxPerSecond);
 
         initialMetrics = newMetrics;
 
@@ -80,12 +102,16 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
     executor.scheduleAtFixedRate(new Runnable(){
       override def run(): Unit = {
         System.out.println("Aggregate!!");
+        writer.foreach(_.println(entries.mkString("\n")))
+        writer.foreach(_.flush())
+        hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
+        entries.clear();
+        //writer.foreach(_.close())
       }
-    },0,50,TimeUnit.SECONDS)
+    },15,55,TimeUnit.SECONDS)
   }
 
   override def stop() {
-    fw.close();
     System.out.println("stoping");
   }
 
@@ -111,5 +137,10 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
       }
       t
     }
+  }
+
+  private val hadoopFlushMethod = {
+    val cls = classOf[FSDataOutputStream]
+    scala.util.Try(cls.getMethod("hflush")).getOrElse(cls.getMethod("sync"))
   }
 }
