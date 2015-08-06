@@ -5,6 +5,7 @@ package org.apache.spark.metrics.sink
  */
 import java.io._
 import java.net.URI
+import java.util
 import java.util.concurrent.{ThreadFactory, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{Date, Locale, Properties}
@@ -14,12 +15,14 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.fs.{FSDataOutputStream, Path, FileSystem}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.{SparkConf, SecurityManager}
+import org.apache.spark.deploy.history.{HistoryServer, FsHistoryProvider}
+import org.apache.spark.{Logging, SparkConf, SecurityManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
 import org.hyperic.sigar.Sigar
 import org.json4s.jackson.JsonMethods._
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 
@@ -28,7 +31,6 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
 
   case class NetworkMetrics(bytesRx: Long, bytesTx: Long)
   case class AverageNetworkMetrics(bytesRxPerSecond: Double, bytesTxPerSecond: Double)
-
 
 
   val CSV_DEFAULT_DIR = "/tmp/";
@@ -66,8 +68,8 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
   val conf : Configuration = new Configuration()
   val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
 
-  val path = new Path("hdfs://localhost:9000/spark-logs/"+localhost+"-network")
-  val fileSystem = Utils.getHadoopFileSystem(new URI("hdfs://localhost:9000/spark-logs/"), conf)
+  val path = new Path("hdfs://localhost:9000/custom-metrics/"+localhost+"-network")
+  val fileSystem = Utils.getHadoopFileSystem(new URI("hdfs://localhost:9000/custom-metrics/"), conf)
 
   var hadoopDataStream: Option[FSDataOutputStream] = None
 
@@ -77,9 +79,13 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
   }
 
   val bstream = new BufferedOutputStream(dstream, outputBufferSize)
+  val workersForApplications : mutable.HashMap[String,PrintWriter] = new mutable.HashMap[String,PrintWriter]()
 
   var writer: Option[PrintWriter] = None
   writer = Some(new PrintWriter(bstream))
+
+  System.out.println(System.getenv("SPARK_MASTER_WEBUI_PORT"));
+  config.getAll.foreach(e => println(e._1+","+e._2))
 
   override def start() {
 
