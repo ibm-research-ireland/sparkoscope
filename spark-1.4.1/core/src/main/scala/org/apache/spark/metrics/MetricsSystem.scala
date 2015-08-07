@@ -26,7 +26,7 @@ import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
+import org.apache.spark.metrics.sink.{MetricsServlet, Sink, SigarSink}
 import org.apache.spark.metrics.source.Source
 
 /**
@@ -183,23 +183,18 @@ private[spark] class MetricsSystem private (
       val classPath = kv._2.getProperty("class")
       if (null != classPath) {
         try {
-          var sink : Option[Sink] = None
-          if(classPath.contains("SigarSink"))
+          val sink = Class.forName(classPath)
+            .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+            .newInstance(kv._2, registry, securityMgr)
+
+          if(sink.isInstanceOf[SigarSink])
           {
-            sink = Some(Class.forName(classPath)
-              .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager], classOf[SparkConf])
-              .newInstance(kv._2, registry, securityMgr, conf).asInstanceOf[Sink])
-            sinks += sink.get
-          } else if (kv._1 == "servlet") {
-            metricsServlet = Some(Class.forName(classPath)
-              .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-              .newInstance(kv._2, registry, securityMgr).asInstanceOf[MetricsServlet])
+            sink.asInstanceOf[SigarSink].setSparkConf(conf)
           }
-          else {
-            sink =Some(Class.forName(classPath)
-              .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-              .newInstance(kv._2, registry, securityMgr).asInstanceOf[Sink])
-            sinks += sink.get
+          if (kv._1 == "servlet") {
+            metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
+          } else {
+            sinks += sink.asInstanceOf[Sink]
           }
         } catch {
           case e: Exception => {

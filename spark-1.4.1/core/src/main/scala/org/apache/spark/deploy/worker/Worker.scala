@@ -136,6 +136,9 @@ private[worker] class Worker(
   private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   private val workerSource = new WorkerSource(this)
 
+  private val sigarMetricsSystem = MetricsSystem.createMetricsSystem("sigar", conf, securityMgr)
+  private val sigarSource = new SigarSource(this)
+
   private var registrationRetryTimer: Option[Cancellable] = None
 
   var coresUsed = 0
@@ -177,6 +180,9 @@ private[worker] class Worker(
 
     metricsSystem.registerSource(workerSource)
     metricsSystem.start()
+
+    sigarMetricsSystem.registerSource(sigarSource)
+    sigarMetricsSystem.start()
     // Attach the worker metrics servlet handler to the web ui after the metrics system is started.
     metricsSystem.getServletHandlers.foreach(webUi.attachHandler)
   }

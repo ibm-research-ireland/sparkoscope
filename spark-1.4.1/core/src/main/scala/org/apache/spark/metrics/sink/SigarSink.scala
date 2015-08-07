@@ -3,118 +3,94 @@ package org.apache.spark.metrics.sink
 /**
  * Created by johngouf on 27/07/15.
  */
-import java.io._
+
+import java.io.{File, BufferedOutputStream, PrintWriter}
 import java.net.URI
-import java.util
-import java.util.concurrent.{ThreadFactory, Executors, TimeUnit}
+import java.util.concurrent.{TimeUnit, ThreadFactory, Executors}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.{Date, Locale, Properties}
+import java.util.{Date, Properties}
 
-import com.codahale.metrics.{Metric, CsvReporter, MetricRegistry}
+import com.codahale.metrics.MetricRegistry
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.permission.FsPermission
-import org.apache.hadoop.fs.{FSDataOutputStream, Path, FileSystem}
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.history.{HistoryServer, FsHistoryProvider}
-import org.apache.spark.{Logging, SparkConf, SecurityManager}
-import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.util.Utils
-import org.hyperic.sigar.Sigar
-import org.json4s.jackson.JsonMethods._
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{FSDataOutputStream, Path}
+import org.apache.spark.{SparkConf, SecurityManager}
 
-import scala.collection.mutable
+import org.apache.spark.util.Utils
+
+import scala.collection.mutable.HashMap
 import scala.collection.mutable.ListBuffer
 
-
 private[spark] class SigarSink(val property: Properties, val registry: MetricRegistry,
-                               securityMgr: SecurityManager, config: SparkConf) extends Sink {
-
-  case class NetworkMetrics(bytesRx: Long, bytesTx: Long)
-  case class AverageNetworkMetrics(bytesRxPerSecond: Double, bytesTxPerSecond: Double)
-
-
-  val CSV_DEFAULT_DIR = "/tmp/";
+                               securityMgr: SecurityManager) extends Sink {
 
   private val FACTORY_ID = new AtomicInteger(1)
 
   private val executor =  Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("sigar-sink" + '-' + FACTORY_ID.incrementAndGet()));
 
-  val sigar = new Sigar();
-  var initialMetrics: NetworkMetrics = getNetworkMetrics();
-
   val localhost = Utils.localHostName();
 
-  var entries = new ListBuffer[String]();
+  val entriesPerApplication = new HashMap[String,ListBuffer[String]]
+  val writersPerApplication = new HashMap[String,(PrintWriter,FSDataOutputStream)]
 
-  def getNetworkMetrics(): NetworkMetrics = {
-    var bytesReceived = 0L;
-    var bytesTransmitted = 0L;
+  val hdfsPath = "hdfs://localhost:9000/custom-metrics/"
 
-    sigar.getNetInterfaceList.foreach(interface => {
-      val netInterfaceStat = sigar.getNetInterfaceStat(interface);
-      bytesReceived += netInterfaceStat.getRxBytes;
-      bytesTransmitted += netInterfaceStat.getTxBytes;
-    })
-
-    NetworkMetrics(bytesReceived, bytesTransmitted)
-  }
-
-  def getAverageNetworkMetric(beforeNetworkMetrics: NetworkMetrics, afterNetworkMetrics: NetworkMetrics): AverageNetworkMetrics = {
-    val bytesRxPerSecond = (afterNetworkMetrics.bytesRx-beforeNetworkMetrics.bytesRx)/10.0;
-    val bytesTxPerSecond = (afterNetworkMetrics.bytesTx-beforeNetworkMetrics.bytesTx)/10.0;
-    AverageNetworkMetrics(bytesRxPerSecond, bytesTxPerSecond);
-  }
-
-  val conf : Configuration = new Configuration()
-  val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
-
-  val path = new Path("hdfs://localhost:9000/custom-metrics/"+localhost+"-network")
-  val fileSystem = Utils.getHadoopFileSystem(new URI("hdfs://localhost:9000/custom-metrics/"), conf)
-
-  var hadoopDataStream: Option[FSDataOutputStream] = None
-
-  val dstream = {
-    hadoopDataStream = Some(fileSystem.create(path))
-    hadoopDataStream.get
-  }
-
-  val bstream = new BufferedOutputStream(dstream, outputBufferSize)
-  val workersForApplications : mutable.HashMap[String,PrintWriter] = new mutable.HashMap[String,PrintWriter]()
-
-  var writer: Option[PrintWriter] = None
-  writer = Some(new PrintWriter(bstream))
-
-  System.out.println(System.getenv("SPARK_MASTER_WEBUI_PORT"));
-  config.getAll.foreach(e => println(e._1+","+e._2))
+  var fileSystem : FileSystem = _
+  var sparkConf : SparkConf = _
+  var conf : Configuration = _
+  var outputBufferSize : Int = _
 
   override def start() {
 
+    //the purpose of this thread is to accumulate metrics, create writers if they dont exist, close if apps have finished
     executor.scheduleAtFixedRate(new Runnable(){
+
       override def run(): Unit = {
+        val gauges = registry.getGauges
+        val timestamp = new Date().getTime;
+        val appsRunning = gauges.get("sigar.appsRunning").getValue.toString;
+        var appsRunningList = appsRunning.replaceAll("\\[", "").replaceAll("\\]","").split(",")
+        if(appsRunning.replaceAll("\\[", "").replaceAll("\\]","").length==0) appsRunningList = new Array[String](0)
 
-        val date = new Date();
+        val entryList = new ListBuffer[String]()
+        gauges.keySet().toArray().filter(!_.toString.equals("sigar.appsRunning")).foreach(metric => {
+          val value = gauges.get(metric).getValue.toString;
+          val entry = "\""+metric+"\" : "+value
+          entryList += entry
+        })
+        entryList += ("\"host\" : "+"\""+localhost+"\"")
+        entryList += ("\"timestamp\" : "+timestamp)
+        val entryString = "{ "+entryList.mkString(",")+" }"
+        appsRunningList.foreach(appId => {
+          var existingEntries = entriesPerApplication.getOrElse(appId, new ListBuffer[String])
+          existingEntries += entryString
+          entriesPerApplication.put(appId,existingEntries)
 
-        val newMetrics: NetworkMetrics = getNetworkMetrics();
+          val writerAndStream = writersPerApplication.getOrElse(appId, createWriterAndStream(appId))
+          writersPerApplication.put(appId,writerAndStream)
 
-        val averageNetworkMetrics: AverageNetworkMetrics = getAverageNetworkMetric(initialMetrics,newMetrics);
+          if(existingEntries.length==5)
+          {
+            existingEntries.foreach(entry => {
+              writerAndStream._1.println(entry);
+            })
+            writerAndStream._1.flush()
+            hadoopFlushMethod.invoke(writerAndStream._2)
+            entriesPerApplication.put(appId,new ListBuffer[String])
+          }
+        })
 
-        entries += (date.getTime+","+averageNetworkMetrics.bytesRxPerSecond+","+averageNetworkMetrics.bytesTxPerSecond);
-
-        initialMetrics = newMetrics;
-
+        writersPerApplication.keySet.foreach(previousAppId => {
+          if(!appsRunningList.contains(previousAppId))
+          {
+            System.out.println(" "+previousAppId+" has finished");
+            closeWriterAndStream(writersPerApplication.get(previousAppId).get)
+            writersPerApplication.remove(previousAppId)
+            entriesPerApplication.remove(previousAppId)
+          }
+        })
       }
-    },10,10,TimeUnit.SECONDS)
-
-    executor.scheduleAtFixedRate(new Runnable(){
-      override def run(): Unit = {
-        System.out.println("Aggregate!!");
-        writer.foreach(_.println(entries.mkString("\n")))
-        writer.foreach(_.flush())
-        hadoopDataStream.foreach(hadoopFlushMethod.invoke(_))
-        entries.clear();
-        //writer.foreach(_.close())
-      }
-    },15,55,TimeUnit.SECONDS)
+    },0,10,TimeUnit.SECONDS)
   }
 
   override def stop() {
@@ -123,6 +99,25 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
 
   override def report() {
     System.out.println("reporting");
+  }
+
+  def setSparkConf(sparkConf: SparkConf)
+  {
+    this.sparkConf = sparkConf
+    this.outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
+
+    conf = new Configuration()
+    if(sys.env.contains("HADOOP_CONF_DIR"))
+    {
+      val confDir = sys.env.get("HADOOP_CONF_DIR").get
+      val file = new File(confDir)
+      if(file.exists&&file.isDirectory)
+      {
+        conf.addResource(confDir)
+      }
+    }
+
+    fileSystem = Utils.getHadoopFileSystem(new URI(hdfsPath), conf)
   }
 
   class NamedThreadFactory (name: String) extends ThreadFactory {
@@ -143,6 +138,24 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
       }
       t
     }
+  }
+
+  def createWriterAndStream(appId: String): (PrintWriter,FSDataOutputStream) = {
+    val finalPath = new Path(hdfsPath+"/"+appId)
+
+    var hadoopDataStream: FSDataOutputStream = fileSystem.create(finalPath)
+    val bstream = new BufferedOutputStream(hadoopDataStream, outputBufferSize)
+    var writer: PrintWriter = (new PrintWriter(bstream))
+    (writer,hadoopDataStream)
+  }
+
+  def closeWriterAndStream(tuple: (PrintWriter, FSDataOutputStream)) = {
+    val writer = tuple._1;
+    val outputStream = tuple._2;
+
+    writer.flush()
+    hadoopFlushMethod.invoke(outputStream)
+    writer.close()
   }
 
   private val hadoopFlushMethod = {
