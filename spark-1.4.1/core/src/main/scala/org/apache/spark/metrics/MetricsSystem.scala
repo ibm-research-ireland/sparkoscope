@@ -26,7 +26,7 @@ import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.apache.spark.metrics.sink.{MetricsServlet, Sink, SigarSink}
+import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
 import org.apache.spark.metrics.source.Source
 
 /**
@@ -65,9 +65,9 @@ import org.apache.spark.metrics.source.Source
  * [options] is the specific property of this source or sink.
  */
 private[spark] class MetricsSystem private (
-                                             val instance: String,
-                                             conf: SparkConf,
-                                             securityMgr: SecurityManager)
+    val instance: String,
+    conf: SparkConf,
+    securityMgr: SecurityManager)
   extends Logging {
 
   private[this] val confFile = conf.get("spark.metrics.conf", null)
@@ -186,11 +186,6 @@ private[spark] class MetricsSystem private (
           val sink = Class.forName(classPath)
             .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
             .newInstance(kv._2, registry, securityMgr)
-
-          if(sink.isInstanceOf[SigarSink])
-          {
-            sink.asInstanceOf[SigarSink].setSparkConf(conf)
-          }
           if (kv._1 == "servlet") {
             metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
           } else {
@@ -223,7 +218,7 @@ private[spark] object MetricsSystem {
   }
 
   def createMetricsSystem(
-                           instance: String, conf: SparkConf, securityMgr: SecurityManager): MetricsSystem = {
+      instance: String, conf: SparkConf, securityMgr: SecurityManager): MetricsSystem = {
     new MetricsSystem(instance, conf, securityMgr)
   }
 }

@@ -31,6 +31,7 @@ HADOOP_CONF_DIR=/home/johngouf/TPC-H/hadoop-2.7.0/etc/hadoop
 
 # Options for the daemons used in the standalone deploy mode
 # - SPARK_MASTER_IP, to bind the master to a different IP address or hostname
+#SPARK_WORKER_INSTANCES=2
 SPARK_MASTER_IP=127.0.0.1
 # - SPARK_MASTER_PORT / SPARK_MASTER_WEBUI_PORT, to use non-default ports for the master
 # - SPARK_MASTER_OPTS, to set config properties only for the master (e.g. "-Dx=y")
@@ -46,7 +47,7 @@ SPARK_MASTER_IP=127.0.0.1
 #CHANGE TO THE APPROPRIATE DIRECTORY
 SPARK_DAEMON_JAVA_OPTS="-Djava.library.path=/home/johngouf/Desktop/hyperic-sigar-1.6.4/sigar-bin/lib/"
 # - SPARK_PUBLIC_DNS, to set the public dns name of the master or workers
-
+SPARK_PID_DIR=/tmp
 # Generic options for the daemons used in the standalone deploy mode
 # - SPARK_CONF_DIR      Alternate conf dir. (Default: ${SPARK_HOME}/conf)
 # - SPARK_LOG_DIR       Where log files are stored.  (Default: ${SPARK_HOME}/logs)

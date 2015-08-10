@@ -4,7 +4,7 @@ package org.apache.spark.metrics.sink
  * Created by johngouf on 27/07/15.
  */
 
-import java.io.{File, BufferedOutputStream, PrintWriter}
+import java.io._
 import java.net.URI
 import java.util.concurrent.{TimeUnit, ThreadFactory, Executors}
 import java.util.concurrent.atomic.AtomicInteger
@@ -13,8 +13,9 @@ import java.util.{Date, Properties}
 import com.codahale.metrics.MetricRegistry
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.fs.{FSDataOutputStream, Path}
-import org.apache.spark.{SparkConf, SecurityManager}
+import org.apache.hadoop.fs.Path
+import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.SecurityManager
 
 import org.apache.spark.util.Utils
 
@@ -24,6 +25,31 @@ import scala.collection.mutable.ListBuffer
 private[spark] class SigarSink(val property: Properties, val registry: MetricRegistry,
                                securityMgr: SecurityManager) extends Sink {
 
+  val SIGAR_KEY_PERIOD = "pollPeriod"
+  val SIGAR_KEY_UNIT = "unit"
+  val SIGAR_KEY_DIR = "dir"
+
+  val SIGAR_DEFAULT_PERIOD = 10
+  val SIGAR_DEFAULT_UNIT = "SECONDS"
+  val SIGAR_DEFAULT_DIR = "hdfs://localhost:9000/custom-metrics/"
+
+  val pollPeriod = Option(property.getProperty(SIGAR_KEY_PERIOD)) match {
+    case Some(s) => s.toInt
+    case None => SIGAR_DEFAULT_PERIOD
+  }
+
+  val pollUnit: TimeUnit = Option(property.getProperty(SIGAR_KEY_UNIT)) match {
+    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
+    case None => TimeUnit.valueOf(SIGAR_DEFAULT_UNIT)
+  }
+
+  MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
+
+  val hdfsPath = Option(property.getProperty(SIGAR_KEY_DIR)) match {
+    case Some(s) => s
+    case None => SIGAR_DEFAULT_DIR
+  }
+
   private val FACTORY_ID = new AtomicInteger(1)
 
   private val executor =  Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("sigar-sink" + '-' + FACTORY_ID.incrementAndGet()));
@@ -31,66 +57,74 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
   val localhost = Utils.localHostName();
 
   val entriesPerApplication = new HashMap[String,ListBuffer[String]]
-  val writersPerApplication = new HashMap[String,(PrintWriter,FSDataOutputStream)]
-
-  val hdfsPath = "hdfs://localhost:9000/custom-metrics/"
 
   var fileSystem : FileSystem = _
-  var sparkConf : SparkConf = _
   var conf : Configuration = _
-  var outputBufferSize : Int = _
+
+  setHadoopConf()
+
+  val sparkTmpDir = sys.env.getOrElse("SPARK_PID_DIR",System.getProperty("java.io.tmpdir"));
+  val fileLock = new File(sparkTmpDir + File.separator + "sigar.pid")
+  var startThread = false;
+  if(!fileLock.exists())
+  {
+    if(fileLock.createNewFile()) startThread = true
+  }
+
+  fileLock.deleteOnExit()
 
   override def start() {
+    if(startThread)
+    {
+      //the purpose of this thread is to accumulate metrics, create writers if they dont exist, close if apps have finished
+      executor.scheduleAtFixedRate(new Runnable(){
+        override def run(): Unit = {
+          val gauges = registry.getGauges
+          val timestamp = new Date().getTime;
+          val appsRunning = gauges.get("sigar.appsRunning").getValue.toString;
+          var appsRunningList = appsRunning.replaceAll("\\[", "").replaceAll("\\]","").split(",")
+          if(appsRunning.replaceAll("\\[", "").replaceAll("\\]","").length==0) appsRunningList = new Array[String](0)
 
-    //the purpose of this thread is to accumulate metrics, create writers if they dont exist, close if apps have finished
-    executor.scheduleAtFixedRate(new Runnable(){
+          val entryList = new ListBuffer[String]()
+          gauges.keySet().toArray().filter(!_.toString.equals("sigar.appsRunning")).foreach(metric => {
+            val value = gauges.get(metric).getValue.toString;
+            val entry = "\""+metric+"\" : "+value
+            entryList += entry
+          })
+          entryList += ("\"host\" : "+"\""+localhost+"\"")
+          entryList += ("\"timestamp\" : "+timestamp)
+          val entryString = "{ "+entryList.mkString(",")+" }"
+          appsRunningList.foreach(appId => {
+            System.out.println(appId+" is running");
+            var existingEntries = entriesPerApplication.getOrElse(appId, new ListBuffer[String])
+            existingEntries += entryString
+            entriesPerApplication.put(appId,existingEntries)
 
-      override def run(): Unit = {
-        val gauges = registry.getGauges
-        val timestamp = new Date().getTime;
-        val appsRunning = gauges.get("sigar.appsRunning").getValue.toString;
-        var appsRunningList = appsRunning.replaceAll("\\[", "").replaceAll("\\]","").split(",")
-        if(appsRunning.replaceAll("\\[", "").replaceAll("\\]","").length==0) appsRunningList = new Array[String](0)
+            if(existingEntries.length==10)
+            {
+              System.out.println("writing entries");
 
-        val entryList = new ListBuffer[String]()
-        gauges.keySet().toArray().filter(!_.toString.equals("sigar.appsRunning")).foreach(metric => {
-          val value = gauges.get(metric).getValue.toString;
-          val entry = "\""+metric+"\" : "+value
-          entryList += entry
-        })
-        entryList += ("\"host\" : "+"\""+localhost+"\"")
-        entryList += ("\"timestamp\" : "+timestamp)
-        val entryString = "{ "+entryList.mkString(",")+" }"
-        appsRunningList.foreach(appId => {
-          var existingEntries = entriesPerApplication.getOrElse(appId, new ListBuffer[String])
-          existingEntries += entryString
-          entriesPerApplication.put(appId,existingEntries)
+              val writer = createWriter(appId)
+              existingEntries.foreach(entry => {
+                writer.foreach(_.write(entry));
+                writer.foreach(_.newLine());
+              })
+              writer.foreach(_.flush())
+              writer.foreach(_.close())
+              entriesPerApplication.put(appId,new ListBuffer[String])
+            }
+          })
 
-          val writerAndStream = writersPerApplication.getOrElse(appId, createWriterAndStream(appId))
-          writersPerApplication.put(appId,writerAndStream)
-
-          if(existingEntries.length==5)
-          {
-            existingEntries.foreach(entry => {
-              writerAndStream._1.println(entry);
-            })
-            writerAndStream._1.flush()
-            hadoopFlushMethod.invoke(writerAndStream._2)
-            entriesPerApplication.put(appId,new ListBuffer[String])
-          }
-        })
-
-        writersPerApplication.keySet.foreach(previousAppId => {
-          if(!appsRunningList.contains(previousAppId))
-          {
-            System.out.println(" "+previousAppId+" has finished");
-            closeWriterAndStream(writersPerApplication.get(previousAppId).get)
-            writersPerApplication.remove(previousAppId)
-            entriesPerApplication.remove(previousAppId)
-          }
-        })
-      }
-    },0,10,TimeUnit.SECONDS)
+          entriesPerApplication.keySet.foreach(previousAppId => {
+            if(!appsRunningList.contains(previousAppId))
+            {
+              System.out.println(" "+previousAppId+" has finished");
+              entriesPerApplication.remove(previousAppId)
+            }
+          })
+        }
+      },0,pollPeriod,pollUnit)
+    }
   }
 
   override def stop() {
@@ -101,11 +135,8 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
     System.out.println("reporting");
   }
 
-  def setSparkConf(sparkConf: SparkConf)
+  def setHadoopConf()
   {
-    this.sparkConf = sparkConf
-    this.outputBufferSize = sparkConf.getInt("spark.eventLog.buffer.kb", 100) * 1024
-
     conf = new Configuration()
     if(sys.env.contains("HADOOP_CONF_DIR"))
     {
@@ -140,26 +171,22 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
     }
   }
 
-  def createWriterAndStream(appId: String): (PrintWriter,FSDataOutputStream) = {
-    val finalPath = new Path(hdfsPath+"/"+appId)
+  def createWriter(appId: String): Option[BufferedWriter] = {
+    val appFolder = new Path(hdfsPath + File.separator + appId)
+    if (!fileSystem.exists(appFolder)) fileSystem.mkdirs(appFolder)
 
-    var hadoopDataStream: FSDataOutputStream = fileSystem.create(finalPath)
-    val bstream = new BufferedOutputStream(hadoopDataStream, outputBufferSize)
-    var writer: PrintWriter = (new PrintWriter(bstream))
-    (writer,hadoopDataStream)
-  }
+    val finalPath = new Path(hdfsPath + File.separator + appId + File.separator + localhost+".json")
+    if (!fileSystem.exists(finalPath)) fileSystem.createNewFile(finalPath)
 
-  def closeWriterAndStream(tuple: (PrintWriter, FSDataOutputStream)) = {
-    val writer = tuple._1;
-    val outputStream = tuple._2;
-
-    writer.flush()
-    hadoopFlushMethod.invoke(outputStream)
-    writer.close()
-  }
-
-  private val hadoopFlushMethod = {
-    val cls = classOf[FSDataOutputStream]
-    scala.util.Try(cls.getMethod("hflush")).getOrElse(cls.getMethod("sync"))
+    try {
+      var hadoopDataStream = fileSystem.append(finalPath)
+      var writer: BufferedWriter = new BufferedWriter(new OutputStreamWriter(hadoopDataStream))
+      Some(writer)
+    } catch  {
+      case e: Exception => {
+        System.out.println(e);
+        None
+      }
+    }
   }
 }
