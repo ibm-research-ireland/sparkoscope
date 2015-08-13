@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-import java.io.FileNotFoundException
+import java.io.{BufferedInputStream, FileNotFoundException}
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -45,7 +45,7 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
+import org.apache.spark.scheduler.{SigarReplayListenerBus, EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, SignalLogger, Utils}
 
@@ -784,13 +784,22 @@ private[master] class Master(
         (eventLogFilePrefix, " (completed)")
       }
 
+      //please change that!
+      val nodesList = fs.listFiles(new Path("hdfs://127.0.0.1:9000/custom-metrics/" + app.id), false)
+      val pathOfMetric = nodesList.next().getPath
+
+      val oneNodeMetricsInput = new BufferedInputStream(fs.open(pathOfMetric))
+
+      val sigarReplayListenerBus = new SigarReplayListenerBus()
+
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
-      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
+      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, sigarReplayListenerBus, new SecurityManager(conf),
         appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)
+        sigarReplayListenerBus.replay(oneNodeMetricsInput, pathOfMetric.toString, maybeTruncated)
       } finally {
         logInput.close()
       }

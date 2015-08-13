@@ -12,10 +12,10 @@ import java.util.{Date, Properties}
 
 import com.codahale.metrics.MetricRegistry
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FSDataOutputStream, FileSystem, Path}
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.SecurityManager
+import org.apache.spark.scheduler.{SparkListenerEvent, SparkListenerApplicationEnd}
+import org.apache.spark.{SparkFirehoseListener, SecurityManager}
 
 import org.apache.spark.util.Utils
 
@@ -56,7 +56,9 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
 
   val localhost = Utils.localHostName();
 
-  val entriesPerApplication = new HashMap[String,ListBuffer[String]]
+  //val entriesPerApplication = new HashMap[String,ListBuffer[String]]
+  val writersPerApplication  = new HashMap[String, (BufferedWriter,FSDataOutputStream)]
+
 
   var fileSystem : FileSystem = _
   var conf : Configuration = _
@@ -95,31 +97,21 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
           entryList += ("\"timestamp\" : "+timestamp)
           val entryString = "{ "+entryList.mkString(",")+" }"
           appsRunningList.foreach(appId => {
-            System.out.println(appId+" is running");
-            var existingEntries = entriesPerApplication.getOrElse(appId, new ListBuffer[String])
-            existingEntries += entryString
-            entriesPerApplication.put(appId,existingEntries)
 
-            if(existingEntries.length==10)
-            {
-              System.out.println("writing entries");
-
-              val writer = createWriter(appId)
-              existingEntries.foreach(entry => {
-                writer.foreach(_.write(entry));
-                writer.foreach(_.newLine());
-              })
-              writer.foreach(_.flush())
-              writer.foreach(_.close())
-              entriesPerApplication.put(appId,new ListBuffer[String])
-            }
+            var writer = writersPerApplication.getOrElse(appId,createWriter(appId))
+            writer._1.write(entryString)
+            writer._1.newLine()
+            writer._1.flush()
+            writer._2.flush()
+            writer._2.hsync()
+            writersPerApplication.put(appId,writer)
           })
 
-          entriesPerApplication.keySet.foreach(previousAppId => {
+          writersPerApplication.keySet.foreach(previousAppId => {
             if(!appsRunningList.contains(previousAppId))
             {
-              System.out.println(" "+previousAppId+" has finished");
-              entriesPerApplication.remove(previousAppId)
+              writersPerApplication.get(previousAppId).get._1.close()
+              writersPerApplication.remove(previousAppId)
             }
           })
         }
@@ -171,22 +163,21 @@ private[spark] class SigarSink(val property: Properties, val registry: MetricReg
     }
   }
 
-  def createWriter(appId: String): Option[BufferedWriter] = {
+  def createWriter(appId: String): (BufferedWriter,FSDataOutputStream) = {
     val appFolder = new Path(hdfsPath + File.separator + appId)
-    if (!fileSystem.exists(appFolder)) fileSystem.mkdirs(appFolder)
-
-    val finalPath = new Path(hdfsPath + File.separator + appId + File.separator + localhost+".json")
-    if (!fileSystem.exists(finalPath)) fileSystem.createNewFile(finalPath)
-
-    try {
-      var hadoopDataStream = fileSystem.append(finalPath)
-      var writer: BufferedWriter = new BufferedWriter(new OutputStreamWriter(hadoopDataStream))
-      Some(writer)
-    } catch  {
-      case e: Exception => {
-        System.out.println(e);
-        None
-      }
+    if (!fileSystem.exists(appFolder)) {
+      val folderCreated = fileSystem.mkdirs(appFolder)
+      System.out.println(appFolder+" "+folderCreated)
     }
+
+    val finalPath = new Path(hdfsPath + File.separator + appId + File.separator + localhost +".json")
+    if (!fileSystem.exists(finalPath)) {
+      val createdNewFile = fileSystem.createNewFile(finalPath)
+      System.out.println(finalPath+" "+createdNewFile)
+    }
+
+    var hadoopDataStream = fileSystem.append(finalPath)
+    var writer: BufferedWriter = new BufferedWriter(new OutputStreamWriter(hadoopDataStream))
+    (writer, hadoopDataStream)
   }
 }

@@ -112,4 +112,7 @@ public class SparkFirehoseListener implements SparkListener {
     public final void onExecutorRemoved(SparkListenerExecutorRemoved executorRemoved) {
         onEvent(executorRemoved);
     }
+
+    @Override
+    public final void onSigarMetrics(SigarMetrics sigarMetrics){ onEvent(sigarMetrics); }
 }

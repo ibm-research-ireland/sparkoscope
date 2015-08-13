@@ -326,6 +326,15 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
       var content = summary
       val executorListener = parent.executorListener
+      val sigarListener = parent.sigarListener
+
+      content ++= <h1> {sigarListener.sigarMetricsData.length} </h1>
+
+      sigarListener.sigarMetricsData.foreach(metrics => {
+        content ++= <span><p>{ metrics.toString }</p></span>
+      }
+     )
+
       content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
           executorListener.executorIdToData, startTime)
 

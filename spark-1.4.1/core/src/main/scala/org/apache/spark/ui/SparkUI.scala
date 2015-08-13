@@ -44,6 +44,7 @@ private[spark] class SparkUI private (
     val jobProgressListener: JobProgressListener,
     val storageListener: StorageListener,
     val operationGraphListener: RDDOperationGraphListener,
+    val sigarListener: SigarListener,
     var appName: String,
     val basePath: String,
     val startTime: Long)
@@ -138,18 +139,19 @@ private[spark] object SparkUI {
       securityManager: SecurityManager,
       appName: String,
       startTime: Long): SparkUI = {
-    create(Some(sc), conf, listenerBus, securityManager, appName,
+    create(Some(sc), conf, listenerBus, None, securityManager, appName,
       jobProgressListener = Some(jobProgressListener), startTime = startTime)
   }
 
   def createHistoryUI(
       conf: SparkConf,
       listenerBus: SparkListenerBus,
+      sigarBus: SigarReplayListenerBus,
       securityManager: SecurityManager,
       appName: String,
       basePath: String,
       startTime: Long): SparkUI = {
-    create(None, conf, listenerBus, securityManager, appName, basePath, startTime = startTime)
+    create(None, conf, listenerBus, Some(sigarBus),  securityManager, appName, basePath, startTime = startTime)
   }
 
   /**
@@ -163,6 +165,7 @@ private[spark] object SparkUI {
       sc: Option[SparkContext],
       conf: SparkConf,
       listenerBus: SparkListenerBus,
+      sigarBus: Option[SigarReplayListenerBus],
       securityManager: SecurityManager,
       appName: String,
       basePath: String = "",
@@ -180,6 +183,7 @@ private[spark] object SparkUI {
     val executorsListener = new ExecutorsListener(storageStatusListener)
     val storageListener = new StorageListener(storageStatusListener)
     val operationGraphListener = new RDDOperationGraphListener(conf)
+    val sigarMetricsListener = new SigarListener()
 
     listenerBus.addListener(environmentListener)
     listenerBus.addListener(storageStatusListener)
@@ -187,8 +191,10 @@ private[spark] object SparkUI {
     listenerBus.addListener(storageListener)
     listenerBus.addListener(operationGraphListener)
 
+    sigarBus.foreach(_.addListener(sigarMetricsListener))
+
     new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
       executorsListener, _jobProgressListener, storageListener, operationGraphListener,
-      appName, basePath, startTime)
+      sigarMetricsListener, appName, basePath, startTime)
   }
 }

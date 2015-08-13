@@ -38,7 +38,8 @@ private[worker] class SigarSource(val worker: Worker) extends Source  {
       previousBytesTxCalculation = currentDate
       previousBytesTx = currentBytesTx
 
-      diffBytes/diffSeconds;
+      if(diffBytes==0) 0.0
+      else diffBytes/diffSeconds;
     }
   })
 
@@ -54,7 +55,8 @@ private[worker] class SigarSource(val worker: Worker) extends Source  {
       previousBytesRxCalculation = currentDate
       previousBytesRx = currentBytesRx
 
-      diffBytes/diffSeconds;
+      if(diffBytes==0) 0.0
+      else diffBytes/diffSeconds;
     }
   })
 

@@ -18,7 +18,6 @@
 package org.apache.spark.util
 
 import java.util.{Properties, UUID}
-
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 import scala.collection.JavaConverters._
@@ -844,6 +843,15 @@ private[spark] object JsonProtocol {
     val totalCores = (json \ "Total Cores").extract[Int]
     val logUrls = mapFromJson(json \ "Log Urls").toMap
     new ExecutorInfo(executorHost, totalCores, logUrls)
+  }
+
+  def sigarMetricsFromJson(json: JValue) : SigarMetrics = {
+    val prefix = "sigar"
+    val bytesRxPerSecond = (json \ (prefix+".bytesRxPerSecond")).extract[Double]
+    val bytesTxPerSecond = (json \ (prefix+".bytesTxPerSecond")).extract[Double]
+    val host = (json \ "host").extract[String]
+    val timestamp = (json \ "timestamp").extract[Long]
+    new SigarMetrics(bytesRxPerSecond, bytesTxPerSecond, host, timestamp)
   }
 
   /** -------------------------------- *
