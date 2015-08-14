@@ -17,12 +17,12 @@
 
 package org.apache.spark.deploy.master
 
-import java.io.{BufferedInputStream, FileNotFoundException}
+import java.io.{InputStream, BufferedInputStream, FileNotFoundException}
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ListBuffer, ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -37,7 +37,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
-  ExecutorState, SparkHadoopUtil}
+ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -50,11 +50,11 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, SignalLogger, Utils}
 
 private[master] class Master(
-    host: String,
-    port: Int,
-    webUiPort: Int,
-    val securityMgr: SecurityManager,
-    val conf: SparkConf)
+                              host: String,
+                              port: Int,
+                              webUiPort: Int,
+                              val securityMgr: SecurityManager,
+                              val conf: SparkConf)
   extends Actor with ActorLogReceive with Logging with LeaderElectable {
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
@@ -473,7 +473,7 @@ private[master] class Master(
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
-      storedWorkers: Seq[WorkerInfo]) {
+                            storedWorkers: Seq[WorkerInfo]) {
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
       try {
@@ -552,7 +552,7 @@ private[master] class Master(
       for (app <- waitingApps if app.coresLeft > 0) {
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-            worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1))
+          worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1))
           .sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
@@ -587,9 +587,9 @@ private[master] class Master(
    * @param worker the worker info
    */
   private def allocateWorkerResourceToExecutors(
-      app: ApplicationInfo,
-      coresToAllocate: Int,
-      worker: WorkerInfo): Unit = {
+                                                 app: ApplicationInfo,
+                                                 coresToAllocate: Int,
+                                                 worker: WorkerInfo): Unit = {
     val memoryPerExecutor = app.desc.memoryPerExecutorMB
     val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(coresToAllocate)
     var coresLeft = coresToAllocate
@@ -762,16 +762,16 @@ private[master] class Master(
     try {
       val eventLogDir = app.desc.eventLogDir
         .getOrElse {
-          // Event logging is not enabled for this application
-          app.desc.appUiUrl = notFoundBasePath
-          return None
-        }
+        // Event logging is not enabled for this application
+        app.desc.appUiUrl = notFoundBasePath
+        return None
+      }
 
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          eventLogDir, app.id, None, app.desc.eventLogCodec)
+        eventLogDir, app.id, None, app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
-          EventLoggingListener.IN_PROGRESS))
+        EventLoggingListener.IN_PROGRESS))
 
       if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
@@ -784,11 +784,15 @@ private[master] class Master(
         (eventLogFilePrefix, " (completed)")
       }
 
-      //please change that!
-      val nodesList = fs.listFiles(new Path("hdfs://127.0.0.1:9000/custom-metrics/" + app.id), false)
-      val pathOfMetric = nodesList.next().getPath
-
-      val oneNodeMetricsInput = new BufferedInputStream(fs.open(pathOfMetric))
+      var customMetricsPath = conf.get("spark.sigar.dir","hdfs://localhost:9000/custom-metrics/");
+      val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + app.id), false)
+      var metricsList = new ListBuffer[InputStream]
+      while(nodesList.hasNext)
+      {
+        val pathOfMetric = nodesList.next().getPath
+        val oneNodeMetricsInput = new BufferedInputStream(fs.open(pathOfMetric))
+        metricsList += oneNodeMetricsInput
+      }
 
       val sigarReplayListenerBus = new SigarReplayListenerBus()
 
@@ -799,7 +803,7 @@ private[master] class Master(
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)
-        sigarReplayListenerBus.replay(oneNodeMetricsInput, pathOfMetric.toString, maybeTruncated)
+        sigarReplayListenerBus.replay(metricsList, "hdfs://127.0.0.1:9000/custom-metrics/" + app.id, maybeTruncated)
       } finally {
         logInput.close()
       }
@@ -876,9 +880,9 @@ private[master] class Master(
   }
 
   private def removeDriver(
-      driverId: String,
-      finalState: DriverState,
-      exception: Option[Exception]) {
+                            driverId: String,
+                            finalState: DriverState,
+                            exception: Option[Exception]) {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")
@@ -939,10 +943,10 @@ private[deploy] object Master extends Logging {
    *   (4) The REST server bound port, if any
    */
   def startSystemAndActor(
-      host: String,
-      port: Int,
-      webUiPort: Int,
-      conf: SparkConf): (ActorSystem, Int, Int, Option[Int]) = {
+                           host: String,
+                           port: Int,
+                           webUiPort: Int,
+                           conf: SparkConf): (ActorSystem, Int, Int, Option[Int]) = {
     val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
       securityManager = securityMgr)
