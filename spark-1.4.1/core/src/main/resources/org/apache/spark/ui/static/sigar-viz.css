@@ -1,0 +1,11 @@
+div#sigar-network-metrics {
+  margin-bottom: 30px;
+}
+
+#sigar-network-metrics.collapsed {
+  display: none;
+}
+
+span.expand-network {
+  cursor: pointer;
+}

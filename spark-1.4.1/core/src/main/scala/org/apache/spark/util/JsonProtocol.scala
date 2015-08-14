@@ -91,6 +91,8 @@ private[spark] object JsonProtocol {
         executorRemovedToJson(executorRemoved)
       case logStart: SparkListenerLogStart =>
         logStartToJson(logStart)
+      case sigarMetrics: SigarMetrics =>
+        sigarMetricsToJson(sigarMetrics)
       // These aren't used, but keeps compiler happy
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
     }
@@ -220,6 +222,13 @@ private[spark] object JsonProtocol {
   def logStartToJson(logStart: SparkListenerLogStart): JValue = {
     ("Event" -> Utils.getFormattedClassName(logStart)) ~
     ("Spark Version" -> SPARK_VERSION)
+  }
+
+  def sigarMetricsToJson(sigarMetrics: SigarMetrics): JValue = {
+    ("bytesRxPerSecond" -> sigarMetrics.bytesRxPerSecond) ~
+    ("bytesTxPerSecond" -> sigarMetrics.bytesTxPerSecond) ~
+    ("host" -> sigarMetrics.host) ~
+    ("timestamp" -> sigarMetrics.timestamp)
   }
 
   /** ------------------------------------------------------------------- *

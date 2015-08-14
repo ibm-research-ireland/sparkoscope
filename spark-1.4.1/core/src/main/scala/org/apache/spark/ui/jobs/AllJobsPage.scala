@@ -17,6 +17,10 @@
 
 package org.apache.spark.ui.jobs
 
+import org.apache.spark.util.JsonProtocol
+import org.json4s.jackson.JsonMethods
+import org.json4s.jackson.JsonMethods._
+
 import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 
@@ -328,12 +332,25 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val executorListener = parent.executorListener
       val sigarListener = parent.sigarListener
 
-      content ++= <h1> {sigarListener.sigarMetricsData.length} </h1>
+      val sigarJsonArray = sigarListener.sigarMetricsData.map(sigarMetrics => compact(JsonMethods.render(JsonProtocol.sparkEventToJson(sigarMetrics)))).mkString(",")
 
-      sigarListener.sigarMetricsData.foreach(metrics => {
-        content ++= <span><p>{ metrics.toString }</p></span>
-      }
-     )
+      val sigarJsonArrayAsStr =
+        s"""
+           |[
+           |${sigarJsonArray}
+           |]
+        """.stripMargin
+
+      content ++= <span class="expand-network">
+                    <span class="expand-network-arrow arrow-closed"></span>
+                    <a data-toggle="tooltip" title={ToolTips.NETWORK} data-placement="right">
+                       Network
+                    </a>
+                  </span>
+      content ++= <div><div id="sigar-network-metrics" class="collapsed"></div><p></p></div>
+      content ++= <script type="text/javascript">
+        {Unparsed(s"drawSigarMetrics(${sigarJsonArrayAsStr});")}
+      </script>
 
       content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
           executorListener.executorIdToData, startTime)
