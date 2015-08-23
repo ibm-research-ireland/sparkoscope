@@ -9,7 +9,7 @@
 # - SPARK_LOCAL_IP, to set the IP address Spark binds to on this node
 # - SPARK_PUBLIC_DNS, to set the public dns name of the driver program
 # - SPARK_CLASSPATH, default classpath entries to append
-HADOOP_CONF_DIR=/disk/hadoop-2.7.0
+HADOOP_CONF_DIR=/home/johngouf/TPC-H/hadoop-2.7.0/etc/hadoop
 
 # Options read by executors and drivers running inside the cluster
 # - SPARK_LOCAL_IP, to set the IP address Spark binds to on this node
@@ -32,8 +32,8 @@ HADOOP_CONF_DIR=/disk/hadoop-2.7.0
 # Options for the daemons used in the standalone deploy mode
 # - SPARK_MASTER_IP, to bind the master to a different IP address or hostname
 #SPARK_WORKER_INSTANCES=2
-#SPARK_MASTER_IP=127.0.0.1
-SPARK_MASTER_WEBUI_PORT=8080
+SPARK_MASTER_IP=127.0.0.1
+SPARK_MASTER_WEBUI_PORT=8181
 # - SPARK_MASTER_PORT / SPARK_MASTER_WEBUI_PORT, to use non-default ports for the master
 # - SPARK_MASTER_OPTS, to set config properties only for the master (e.g. "-Dx=y")
 # - SPARK_WORKER_CORES, to set the number of cores to use on this machine
@@ -46,7 +46,7 @@ SPARK_MASTER_WEBUI_PORT=8080
 # - SPARK_SHUFFLE_OPTS, to set config properties only for the external shuffle service (e.g. "-Dx=y")
 # - SPARK_DAEMON_JAVA_OPTS, to set config properties for all daemons (e.g. "-Dx=y")
 #CHANGE TO THE APPROPRIATE DIRECTORY
-SPARK_DAEMON_JAVA_OPTS="-Djava.library.path=/disk/hyperic-sigar-1.6.4/sigar-bin/lib/"
+SPARK_DAEMON_JAVA_OPTS="-Djava.library.path=/home/johngouf/Desktop/hyperic-sigar-1.6.4/sigar-bin/lib/"
 # - SPARK_PUBLIC_DNS, to set the public dns name of the master or workers
 SPARK_PID_DIR=/tmp
 # Generic options for the daemons used in the standalone deploy mode

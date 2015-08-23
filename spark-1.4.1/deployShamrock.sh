@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+ssh shamrock064 '/disk/spark-viz/sbin/stop-all.sh'
+/home/johngouf/spark-viz/build.sh
+rsync -azP /home/johngouf/spark-viz/ shamrock064:/disk/spark-viz
+rsync -azP /home/johngouf/spark-viz/ shamrock066:/disk/spark-viz
+rsync -azP /home/johngouf/spark-viz/ shamrock067:/disk/spark-viz
+rsync -azP /home/johngouf/spark-viz/ shamrock068:/disk/spark-viz
+ssh shamrock064 '/disk/spark-viz/sbin/start-all.sh'

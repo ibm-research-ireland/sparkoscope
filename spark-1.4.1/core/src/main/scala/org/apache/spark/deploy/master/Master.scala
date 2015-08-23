@@ -803,7 +803,7 @@ private[master] class Master(
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)
-        sigarReplayListenerBus.replay(metricsList, "hdfs://127.0.0.1:9000/custom-metrics/" + app.id, maybeTruncated)
+        sigarReplayListenerBus.replay(metricsList, customMetricsPath + app.id, maybeTruncated)
       } finally {
         logInput.close()
       }

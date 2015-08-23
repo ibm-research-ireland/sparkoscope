@@ -33,33 +33,17 @@ private[spark] class SigarReplayListenerBus extends SparkListenerBus with Loggin
               sourceName: String,
               maybeTruncated: Boolean = false): Unit = {
     var currentLine: String = null
-    var lineNumber: Int = 1
     logDataList.foreach(logData => {
-      try {
-        val lines = new BufferedReader(new InputStreamReader(logData))
+      val lines = new BufferedReader(new InputStreamReader(logData))
+      try{
         while ((currentLine = lines.readLine()) != null) {
-          try {
-            postToAll(JsonProtocol.sigarMetricsFromJson(parse(currentLine)))
-          } catch {
-            case jpe: JsonParseException =>
-              // We can only ignore exception from last line of the file that might be truncated
-              if (!maybeTruncated) {
-                throw jpe
-              } else {
-                logWarning(s"Got JsonParseException from log file $sourceName" +
-                  s" at line $lineNumber, the file might not have finished writing cleanly.")
-              }
-          }
-          lineNumber += 1
+          postToAll(JsonProtocol.sigarMetricsFromJson(parse(currentLine)))
         }
-        lines.close();
-      } catch {
-        case ioe: IOException =>
-          throw ioe
+      }catch {
         case e: Exception =>
-          logError(s"Exception parsing Spark event log: $sourceName", e)
-          logError(s"Malformed line #$lineNumber: $currentLine\n")
+          logWarning(s"Got JsonParseException from log file $sourceName")
       }
+      lines.close()
     })
   }
 }

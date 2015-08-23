@@ -332,25 +332,28 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val executorListener = parent.executorListener
       val sigarListener = parent.sigarListener
 
-      val sigarJsonArray = sigarListener.sigarMetricsData.map(sigarMetrics => compact(JsonMethods.render(JsonProtocol.sparkEventToJson(sigarMetrics)))).mkString(",")
+      if(sigarListener.sigarMetricsData.size > 0)
+      {
+        val sigarJsonArray = sigarListener.sigarMetricsData.map(sigarMetrics => compact(JsonMethods.render(JsonProtocol.sparkEventToJson(sigarMetrics)))).mkString(",")
 
-      val sigarJsonArrayAsStr =
-        s"""
-           |[
-           |${sigarJsonArray}
-           |]
+        val sigarJsonArrayAsStr =
+          s"""
+             |[
+             |${sigarJsonArray}
+              |]
         """.stripMargin
 
-      content ++= <span class="expand-network">
-                    <span class="expand-network-arrow arrow-closed"></span>
-                    <a data-toggle="tooltip" title={ToolTips.NETWORK} data-placement="right">
-                       Network
-                    </a>
-                  </span>
-      content ++= <div><div id="sigar-network-metrics" class="collapsed"></div><p></p></div>
-      content ++= <script type="text/javascript">
-        {Unparsed(s"drawSigarMetrics(${sigarJsonArrayAsStr});")}
-      </script>
+        content ++= <span class="expand-network">
+          <span class="expand-network-arrow arrow-closed"></span>
+          <a data-toggle="tooltip" title={ToolTips.NETWORK} data-placement="right">
+            Network
+          </a>
+        </span>
+        content ++= <div><div id="sigar-network-metrics" class="collapsed"></div><p></p></div>
+        content ++= <script type="text/javascript">
+          {Unparsed(s"drawSigarMetrics(${sigarJsonArrayAsStr});")}
+        </script>
+      }
 
       content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
           executorListener.executorIdToData, startTime)
