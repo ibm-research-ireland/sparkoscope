@@ -22,7 +22,7 @@ function drawSigarMetrics(sigarMetrics) {
         networkMap[host] = existingNetworkData;
 
         var existingDiskData = [];
-        if (host in diskData) {
+        if (host in diskMap) {
             existingDiskData = diskMap[host];
         }
         existingDiskData.push({
@@ -75,8 +75,6 @@ function drawSigarMetrics(sigarMetrics) {
 
     MG.data_graphic(diskGraph);
     addEventListener("disk",diskGraph);
-
-
 }
 
 function addEventListener(tag, graph) {
