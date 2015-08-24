@@ -13,7 +13,7 @@ function drawSigarMetrics(sigarMetrics) {
     }
     existingData.push( {
       date: new Date(sigarMetrics[x].timestamp),
-      value: parseFloat(sigarMetrics[x].bytesRxPerSecond)+parseFloat(sigarMetrics[x].bytesTxPerSecond)
+      value: parseFloat(sigarMetrics[x].kBytesRxPerSecond)+parseFloat(sigarMetrics[x].kBytesTxPerSecond)
     });
     map[host] = existingData;
   }
@@ -25,7 +25,7 @@ function drawSigarMetrics(sigarMetrics) {
 
 var graph = {
                     title: "Total Network Traffic",
-                    description: "Sum of bytesRxPerSecond and bytesTxPerSecond per host",
+                    description: "Sum of kBytesRxPerSecond and kBytesTxPerSecond per host",
                     data: data,
                     area: false,
                     right: 100,

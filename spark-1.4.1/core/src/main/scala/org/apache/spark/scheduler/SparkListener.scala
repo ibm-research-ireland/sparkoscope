@@ -117,7 +117,7 @@ case class SparkListenerApplicationStart(appName: String, appId: Option[String],
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
 @DeveloperApi
-case class SigarMetrics(bytesRxPerSecond: Double, bytesTxPerSecond: Double, host: String, timestamp: Long) extends SparkListenerEvent
+case class SigarMetrics(kBytesRxPerSecond: Double, kBytesTxPerSecond: Double, host: String, timestamp: Long) extends SparkListenerEvent
 
 /**
  * An internal class that describes the metadata of an event log.

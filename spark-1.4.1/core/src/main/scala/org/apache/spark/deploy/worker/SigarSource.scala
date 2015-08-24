@@ -14,7 +14,7 @@ private[worker] class SigarSource(val worker: Worker) extends Source  {
   override val metricRegistry : MetricRegistry = new MetricRegistry()
 
   case class NetworkMetrics(bytesRx: Long, bytesTx: Long)
-  case class AverageNetworkMetrics(bytesRxPerSecond: Double, bytesTxPerSecond: Double)
+  case class DiskMetrics(bytesWritten: Long, bytesRead: Long)
 
   val sigar = new Sigar();
 
@@ -28,7 +28,7 @@ private[worker] class SigarSource(val worker: Worker) extends Source  {
   var previousBytesRx : Long = initialMetrics.bytesRx
   var previousBytesRxMeasurement : Double = 0.0
 
-  metricRegistry.register(MetricRegistry.name("bytesTxPerSecond"), new Gauge[Double] {
+  metricRegistry.register(MetricRegistry.name("kBytesTxPerSecond"), new Gauge[Double] {
     override def getValue: Double = {
       val currentMetrics : NetworkMetrics = getNetworkMetrics();
       val currentDate : Long = new Date().getTime;
@@ -45,12 +45,12 @@ private[worker] class SigarSource(val worker: Worker) extends Source  {
         if (diffBytes == 0) previousBytesTxMeasurement = 0.0
         else previousBytesTxMeasurement = diffBytes / diffSeconds;
 
-        previousBytesTxMeasurement
+        previousBytesTxMeasurement/1000.0
       }
     }
   })
 
-  metricRegistry.register(MetricRegistry.name("bytesRxPerSecond"), new Gauge[Double] {
+  metricRegistry.register(MetricRegistry.name("kBytesRxPerSecond"), new Gauge[Double] {
     override def getValue: Double = {
       val currentMetrics : NetworkMetrics = getNetworkMetrics();
       val currentDate : Long = new Date().getTime;
@@ -67,7 +67,7 @@ private[worker] class SigarSource(val worker: Worker) extends Source  {
         if(diffBytes==0) previousBytesRxMeasurement = 0.0
         else previousBytesRxMeasurement = diffBytes/diffSeconds;
 
-        previousBytesRxMeasurement
+        previousBytesRxMeasurement/1000.0
       }
     }
   })

@@ -18,7 +18,6 @@ class SigarListener() extends SparkListener with Logging {
   val sigarMetricsData = new ListBuffer[SigarMetrics]
 
   override def onSigarMetrics(sigarMetrics: SigarMetrics) : Unit = synchronized {
-    System.out.println(sigarMetrics.bytesRxPerSecond+","+sigarMetrics.bytesTxPerSecond+","+sigarMetrics.host+","+sigarMetrics.timestamp)
     sigarMetricsData += sigarMetrics
   }
 

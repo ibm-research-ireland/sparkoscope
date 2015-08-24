@@ -225,8 +225,8 @@ private[spark] object JsonProtocol {
   }
 
   def sigarMetricsToJson(sigarMetrics: SigarMetrics): JValue = {
-    ("bytesRxPerSecond" -> sigarMetrics.bytesRxPerSecond) ~
-    ("bytesTxPerSecond" -> sigarMetrics.bytesTxPerSecond) ~
+    ("kBytesRxPerSecond" -> sigarMetrics.kBytesRxPerSecond) ~
+    ("kBytesTxPerSecond" -> sigarMetrics.kBytesTxPerSecond) ~
     ("host" -> sigarMetrics.host) ~
     ("timestamp" -> sigarMetrics.timestamp)
   }
@@ -856,11 +856,11 @@ private[spark] object JsonProtocol {
 
   def sigarMetricsFromJson(json: JValue) : SigarMetrics = {
     val prefix = "sigar"
-    val bytesRxPerSecond = (json \ (prefix+".bytesRxPerSecond")).extract[Double]
-    val bytesTxPerSecond = (json \ (prefix+".bytesTxPerSecond")).extract[Double]
+    val kBytesRxPerSecond = (json \ (prefix+".kBytesRxPerSecond")).extract[Double]
+    val kBytesTxPerSecond = (json \ (prefix+".kBytesTxPerSecond")).extract[Double]
     val host = (json \ "host").extract[String]
     val timestamp = (json \ "timestamp").extract[Long]
-    new SigarMetrics(bytesRxPerSecond, bytesTxPerSecond, host, timestamp)
+    new SigarMetrics(kBytesRxPerSecond, kBytesTxPerSecond, host, timestamp)
   }
 
   /** -------------------------------- *
