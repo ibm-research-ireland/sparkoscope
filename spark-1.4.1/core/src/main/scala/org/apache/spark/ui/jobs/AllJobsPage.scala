@@ -350,6 +350,15 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           </a>
         </span>
         content ++= <div><div id="sigar-network-metrics" class="collapsed"></div><p></p></div>
+
+        content ++= <span class="expand-disk">
+          <span class="expand-disk-arrow arrow-closed"></span>
+          <a data-toggle="tooltip" title={ToolTips.DISK} data-placement="right">
+            Disk
+          </a>
+        </span>
+        content ++= <div><div id="sigar-disk-metrics" class="collapsed"></div><p></p></div>
+
         content ++= <script type="text/javascript">
           {Unparsed(s"drawSigarMetrics(${sigarJsonArrayAsStr});")}
         </script>

@@ -9,3 +9,15 @@ div#sigar-network-metrics {
 span.expand-network {
   cursor: pointer;
 }
+
+div#sigar-disk-metrics {
+  margin-bottom: 30px;
+}
+
+#sigar-disk-metrics.collapsed {
+  display: none;
+}
+
+span.expand-disk {
+  cursor: pointer;
+}

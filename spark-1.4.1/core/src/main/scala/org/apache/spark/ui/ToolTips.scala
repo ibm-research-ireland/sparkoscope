@@ -82,7 +82,11 @@ private[spark] object ToolTips {
     """
 
   val NETWORK =
-    """Shows the sum of RxBytes and TxBytes per second, per node
+    """Shows the sum of RxKBytes and TxKBytes per second, per node
+    """
+
+  val DISK =
+    """Shows the sum of KBytes Written and Read per second, per node
     """
 
 }
