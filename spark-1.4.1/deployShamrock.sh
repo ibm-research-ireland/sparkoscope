@@ -2,6 +2,7 @@
 
 ssh shamrock064 '/disk/spark-viz/sbin/stop-all.sh'
 /home/johngouf/spark-viz/build.sh
+find -type f -name '*.bak' | while read f; do mv "$f" "${f%.bak}"; done
 rsync -azP /home/johngouf/spark-viz/ shamrock064:/disk/spark-viz
 rsync -azP /home/johngouf/spark-viz/ shamrock066:/disk/spark-viz
 rsync -azP /home/johngouf/spark-viz/ shamrock067:/disk/spark-viz
