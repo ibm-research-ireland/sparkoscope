@@ -6,6 +6,12 @@ function drawSigarMetrics(sigarMetrics) {
     var diskData = [];
     var diskMap = {};
 
+    var cpuData = [];
+    var cpuMap = {};
+
+    var ramData = [];
+    var ramMap = {};
+
     var legend = [];
 
     for (var x in sigarMetrics) {
@@ -31,11 +37,32 @@ function drawSigarMetrics(sigarMetrics) {
         })
         diskMap[host] = existingDiskData;
 
+        var existingCpuData = [];
+        if (host in cpuMap) {
+            existingCpuData = cpuMap[host];
+        }
+        existingCpuData.push({
+            date: new Date(sigarMetrics[x].timestamp),
+            value: parseFloat(sigarMetrics[x].cpu)
+        })
+        cpuMap[host] = existingCpuData;
+
+        var existingRamData = [];
+        if (host in ramMap) {
+            existingRamData = ramMap[host];
+        }
+        existingRamData.push({
+            date: new Date(sigarMetrics[x].timestamp),
+            value: parseFloat(sigarMetrics[x].ram)
+        })
+        ramMap[host] = existingRamData;
     }
     for (var host in networkMap) {
         legend.push(host);
         newtworkData.push(networkMap[host]);
         diskData.push(diskMap[host]);
+        cpuData.push(cpuMap[host]);
+        ramData.push(ramMap[host]);
     }
 
     var networkGraph = {
@@ -75,6 +102,45 @@ function drawSigarMetrics(sigarMetrics) {
 
     MG.data_graphic(diskGraph);
     addEventListener("disk",diskGraph);
+
+    var cpuGraph = {
+        title: "CPU Utilization",
+        description: "Percentage of CPU Utilization per host",
+        data: cpuData,
+        area: false,
+        right: 100,
+        width: 300,
+        missing_is_zero: false,
+        interpolate: 'basic',
+        min_y: -1,
+        y_extended_ticks: true,
+        height: 300,
+        legend: legend,
+        target: '#sigar-cpu-metrics'
+    }
+
+    MG.data_graphic(cpuGraph);
+    addEventListener("cpu",cpuGraph);
+
+    var ramGraph = {
+        title: "RAM Utilization",
+        description: "Percentage of RAM Utilization per host",
+        data: ramData,
+        area: false,
+        right: 100,
+        width: 300,
+        missing_is_zero: false,
+        interpolate: 'basic',
+        min_y: -1,
+        y_extended_ticks: true,
+        height: 300,
+        legend: legend,
+        target: '#sigar-ram-metrics'
+    }
+
+    MG.data_graphic(ramGraph);
+    addEventListener("ram",ramGraph);
+
 }
 
 function addEventListener(tag, graph) {

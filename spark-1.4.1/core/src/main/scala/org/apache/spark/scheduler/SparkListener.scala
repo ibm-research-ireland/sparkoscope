@@ -119,6 +119,7 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 @DeveloperApi
 case class SigarMetrics(kBytesRxPerSecond: Double, kBytesTxPerSecond: Double,
                         kBytesWrittenPerSecond: Double, kBytesReadPerSecond: Double,
+                        cpu: Double, ram: Double,
                         host: String, timestamp: Long) extends SparkListenerEvent
 
 /**

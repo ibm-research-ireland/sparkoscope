@@ -146,12 +146,12 @@ private[spark] object SparkUI {
   def createHistoryUI(
       conf: SparkConf,
       listenerBus: SparkListenerBus,
-      sigarBus: SigarReplayListenerBus,
+      sigarBus: Option[SigarReplayListenerBus],
       securityManager: SecurityManager,
       appName: String,
       basePath: String,
       startTime: Long): SparkUI = {
-    create(None, conf, listenerBus, Some(sigarBus),  securityManager, appName, basePath, startTime = startTime)
+    create(None, conf, listenerBus, sigarBus,  securityManager, appName, basePath, startTime = startTime)
   }
 
   /**

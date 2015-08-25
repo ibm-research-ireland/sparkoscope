@@ -229,6 +229,8 @@ private[spark] object JsonProtocol {
     ("kBytesTxPerSecond" -> sigarMetrics.kBytesTxPerSecond) ~
     ("kBytesWrittenPerSecond" -> sigarMetrics.kBytesWrittenPerSecond) ~
     ("kBytesReadPerSecond" -> sigarMetrics.kBytesReadPerSecond) ~
+    ("cpu" -> sigarMetrics.cpu) ~
+    ("ram" -> sigarMetrics.ram) ~
     ("host" -> sigarMetrics.host) ~
     ("timestamp" -> sigarMetrics.timestamp)
   }
@@ -862,9 +864,11 @@ private[spark] object JsonProtocol {
     val kBytesTxPerSecond = (json \ (prefix+".kBytesTxPerSecond")).extract[Double]
     val kBytesWrittenPerSecond = (json \ (prefix+".kBytesWrittenPerSecond")).extract[Double]
     val kBytesReadPerSecond = (json \ (prefix+".kBytesReadPerSecond")).extract[Double]
+    val cpu = (json \ (prefix+".cpu")).extract[Double]
+    val ram = (json \ (prefix+".ram")).extract[Double]
     val host = (json \ "host").extract[String]
     val timestamp = (json \ "timestamp").extract[Long]
-    new SigarMetrics(kBytesRxPerSecond, kBytesTxPerSecond, kBytesWrittenPerSecond, kBytesReadPerSecond, host, timestamp)
+    new SigarMetrics(kBytesRxPerSecond, kBytesTxPerSecond, kBytesWrittenPerSecond, kBytesReadPerSecond, cpu, ram, host, timestamp)
   }
 
   /** -------------------------------- *

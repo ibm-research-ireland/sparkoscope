@@ -126,6 +126,18 @@ private[worker] class SigarSource(val worker: Worker) extends Source {
     }
   })
 
+  metricRegistry.register(MetricRegistry.name("cpu"),new Gauge[Double] {
+    override def getValue: Double = {
+      sigar.getCpuPerc.getCombined*100.0
+    }
+  })
+
+  metricRegistry.register(MetricRegistry.name("ram"),new Gauge[Double] {
+    override def getValue: Double = {
+      sigar.getMem.getUsedPercent
+    }
+  });
+
   metricRegistry.register(MetricRegistry.name("appsRunning"), new Gauge[String] {
     override def getValue: String = {
       val allApps = worker.appDirectories;

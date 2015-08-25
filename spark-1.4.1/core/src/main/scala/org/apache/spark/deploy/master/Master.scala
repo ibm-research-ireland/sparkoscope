@@ -50,11 +50,11 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, SignalLogger, Utils}
 
 private[master] class Master(
-                              host: String,
-                              port: Int,
-                              webUiPort: Int,
-                              val securityMgr: SecurityManager,
-                              val conf: SparkConf)
+    host: String,
+    port: Int,
+    webUiPort: Int,
+    val securityMgr: SecurityManager,
+    val conf: SparkConf)
   extends Actor with ActorLogReceive with Logging with LeaderElectable {
 
   import context.dispatcher   // to use Akka's scheduler.schedule()
@@ -473,7 +473,7 @@ private[master] class Master(
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
-                            storedWorkers: Seq[WorkerInfo]) {
+      storedWorkers: Seq[WorkerInfo]) {
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
       try {
@@ -552,7 +552,7 @@ private[master] class Master(
       for (app <- waitingApps if app.coresLeft > 0) {
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-          worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1))
+            worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1))
           .sortBy(_.coresFree).reverse
         val numUsable = usableWorkers.length
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
@@ -587,9 +587,9 @@ private[master] class Master(
    * @param worker the worker info
    */
   private def allocateWorkerResourceToExecutors(
-                                                 app: ApplicationInfo,
-                                                 coresToAllocate: Int,
-                                                 worker: WorkerInfo): Unit = {
+      app: ApplicationInfo,
+      coresToAllocate: Int,
+      worker: WorkerInfo): Unit = {
     val memoryPerExecutor = app.desc.memoryPerExecutorMB
     val coresPerExecutor = app.desc.coresPerExecutor.getOrElse(coresToAllocate)
     var coresLeft = coresToAllocate
@@ -762,16 +762,36 @@ private[master] class Master(
     try {
       val eventLogDir = app.desc.eventLogDir
         .getOrElse {
-        // Event logging is not enabled for this application
-        app.desc.appUiUrl = notFoundBasePath
-        return None
-      }
+          // Event logging is not enabled for this application
+          app.desc.appUiUrl = notFoundBasePath
+          return None
+        }
+
+      var sigarReplayListenerBus : Option[SigarReplayListenerBus] = None
+      val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
+
+      var customMetricsPath = conf.get("spark.sigar.dir","hdfs://localhost:9000/custom-metrics/");
+      val jsonDirectory = new Path(customMetricsPath + "/" + app.id)
+
+      var metricsList = new ListBuffer[InputStream]
+      if (fs.exists(jsonDirectory)) {
+        logWarning("custom metrics directory exists")
+        val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + app.id), false)
+
+        while (nodesList.hasNext) {
+          val pathOfMetric = nodesList.next().getPath
+          val oneNodeMetricsInput = new BufferedInputStream(fs.open(pathOfMetric))
+          metricsList += oneNodeMetricsInput
+        }
+        sigarReplayListenerBus = Some(new SigarReplayListenerBus())
+      } else sigarReplayListenerBus = None
+
+      logWarning("files found "+metricsList.mkString(","))
 
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-        eventLogDir, app.id, None, app.desc.eventLogCodec)
-      val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
+          eventLogDir, app.id, None, app.desc.eventLogCodec)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
-        EventLoggingListener.IN_PROGRESS))
+          EventLoggingListener.IN_PROGRESS))
 
       if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
@@ -784,26 +804,15 @@ private[master] class Master(
         (eventLogFilePrefix, " (completed)")
       }
 
-      var customMetricsPath = conf.get("spark.sigar.dir","hdfs://localhost:9000/custom-metrics/");
-      val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + app.id), false)
-      var metricsList = new ListBuffer[InputStream]
-      while(nodesList.hasNext)
-      {
-        val pathOfMetric = nodesList.next().getPath
-        val oneNodeMetricsInput = new BufferedInputStream(fs.open(pathOfMetric))
-        metricsList += oneNodeMetricsInput
-      }
-
-      val sigarReplayListenerBus = new SigarReplayListenerBus()
-
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
+      logWarning("event file "+logInput)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, sigarReplayListenerBus, new SecurityManager(conf),
         appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)
-        sigarReplayListenerBus.replay(metricsList, customMetricsPath + app.id, maybeTruncated)
+        sigarReplayListenerBus.foreach(_.replay(metricsList, customMetricsPath + "/" + app.id, maybeTruncated))
       } finally {
         logInput.close()
       }
@@ -815,6 +824,7 @@ private[master] class Master(
     } catch {
       case fnf: FileNotFoundException =>
         // Event logging is enabled for this application, but no event logs are found
+        logWarning(fnf.getMessage)
         val title = s"Application history not found (${app.id})"
         var msg = s"No event logs found for application $appName in ${app.desc.eventLogDir.get}."
         logWarning(msg)
@@ -824,6 +834,7 @@ private[master] class Master(
         None
       case e: Exception =>
         // Relay exception message to application UI page
+        e.printStackTrace()
         val title = s"Application history load error (${app.id})"
         val exception = URLEncoder.encode(Utils.exceptionString(e), "UTF-8")
         var msg = s"Exception in replaying log for application $appName!"

@@ -89,4 +89,13 @@ private[spark] object ToolTips {
     """Shows the sum of KBytes Written and Read per second, per node
     """
 
+  val CPU =
+    """Shows the sum of the percentage of CPU Utilization per node
+    """
+
+  val RAM =
+    """Shows the sum of the percentage of RAM Utilization per node
+    """
+
+
 }

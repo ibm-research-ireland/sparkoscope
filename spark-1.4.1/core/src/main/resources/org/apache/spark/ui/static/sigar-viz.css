@@ -21,3 +21,27 @@ div#sigar-disk-metrics {
 span.expand-disk {
   cursor: pointer;
 }
+
+div#sigar-cpu-metrics {
+  margin-bottom: 30px;
+}
+
+#sigar-cpu-metrics.collapsed {
+  display: none;
+}
+
+span.expand-cpu {
+  cursor: pointer;
+}
+
+div#sigar-ram-metrics {
+  margin-bottom: 30px;
+}
+
+#sigar-ram-metrics.collapsed {
+  display: none;
+}
+
+span.expand-ram {
+  cursor: pointer;
+}

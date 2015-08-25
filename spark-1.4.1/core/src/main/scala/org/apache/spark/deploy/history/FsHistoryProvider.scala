@@ -143,7 +143,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val ui = {
             val conf = this.conf.clone()
             val appSecManager = new SecurityManager(conf)
-            SparkUI.createHistoryUI(conf, replayBus, sigarBus, appSecManager, appId,
+            SparkUI.createHistoryUI(conf, replayBus, Some(sigarBus), appSecManager, appId,
               HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }

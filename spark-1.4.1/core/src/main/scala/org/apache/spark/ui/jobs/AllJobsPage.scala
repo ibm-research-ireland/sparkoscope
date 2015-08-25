@@ -359,6 +359,22 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         </span>
         content ++= <div><div id="sigar-disk-metrics" class="collapsed"></div><p></p></div>
 
+        content ++= <span class="expand-cpu">
+          <span class="expand-cpu-arrow arrow-closed"></span>
+          <a data-toggle="tooltip" title={ToolTips.CPU} data-placement="right">
+            CPU
+          </a>
+        </span>
+        content ++= <div><div id="sigar-cpu-metrics" class="collapsed"></div><p></p></div>
+
+        content ++= <span class="expand-ram">
+          <span class="expand-ram-arrow arrow-closed"></span>
+          <a data-toggle="tooltip" title={ToolTips.RAM} data-placement="right">
+            RAM
+          </a>
+        </span>
+        content ++= <div><div id="sigar-ram-metrics" class="collapsed"></div><p></p></div>
+
         content ++= <script type="text/javascript">
           {Unparsed(s"drawSigarMetrics(${sigarJsonArrayAsStr});")}
         </script>

@@ -32,18 +32,18 @@ private[spark] class SigarReplayListenerBus extends SparkListenerBus with Loggin
               logDataList: ListBuffer[InputStream],
               sourceName: String,
               maybeTruncated: Boolean = false): Unit = {
-    var currentLine: String = null
+
     logDataList.foreach(logData => {
-      val lines = new BufferedReader(new InputStreamReader(logData))
-      try{
-        while ((currentLine = lines.readLine()) != null) {
-          postToAll(JsonProtocol.sigarMetricsFromJson(parse(currentLine)))
+      try {
+        for (line <- Source.fromInputStream(logData).getLines()) {
+          System.out.println(line)
+          postToAll(JsonProtocol.sigarMetricsFromJson(parse(line)))
         }
-      }catch {
-        case e: Exception =>
-          logWarning(s"Got JsonParseException from log file $sourceName")
+      } catch {
+        case ex: Exception => {
+          logWarning(s"Got JsonParseException from log file $logData")
+        }
       }
-      lines.close()
     })
   }
 }
