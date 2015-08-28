@@ -21,6 +21,9 @@ import org.apache.spark.util.JsonProtocol
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
 
+import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
+
 import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 
@@ -340,6 +343,23 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           s"""
              |[
              |${sigarJsonArray}
+             |]
+        """.stripMargin
+
+        val stageInfo = completedJobs
+          .flatMap(job => job.stageIds.map(stage => (job,stage)))
+          .map(jobStage => {
+           val jobId = jobStage._1.jobId
+           val stageId = jobStage._2
+           val stageInfo = parent.jobProgresslistener.stageIdToInfo.get(stageId)
+           (jobId,stageInfo.get.name,stageInfo.get.submissionTime.get)
+         })
+          .map(job =>  compact(JsonMethods.render(("jobId" -> job._3) ~ ("name" -> job._2) ~ ("submitted" -> job._3)))).mkString(",")
+
+        val stageInfoAsStr =
+          s"""
+             |[
+             |${stageInfo}
               |]
         """.stripMargin
 
@@ -376,7 +396,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         content ++= <div><div id="sigar-ram-metrics" class="collapsed"></div><p></p></div>
 
         content ++= <script type="text/javascript">
-          {Unparsed(s"drawSigarMetrics(${sigarJsonArrayAsStr});")}
+          {Unparsed(s"drawSigarMetrics(${sigarJsonArrayAsStr},${stageInfoAsStr});")}
         </script>
       }
 

@@ -1,4 +1,22 @@
-function drawSigarMetrics(sigarMetrics) {
+function drawSigarMetrics(sigarMetrics,stageInfo) {
+
+    var markers = [];
+    var minimumSubmittedValue = 0;
+    var minimumSubmittedIndex = 0;
+
+    for (var x in stageInfo) {
+        var name = stageInfo[x].name;
+        var submitted = new Date(stageInfo[x].submitted);
+        if(minimumSubmittedValue==0 || submitted<minimumSubmittedValue)
+        {
+            minimumSubmittedValue = submitted;
+            minimumSubmittedIndex = markers.length;
+        }
+        markers.push({
+            date: submitted,
+            label: name
+        })
+    }
 
     var newtworkData = [];
     var networkMap = {};
@@ -13,16 +31,23 @@ function drawSigarMetrics(sigarMetrics) {
     var ramMap = {};
 
     var legend = [];
+    var minimumDataTime = 0;
 
     for (var x in sigarMetrics) {
         var host = sigarMetrics[x].host;
+        var millis = sigarMetrics[x].timestamp;
+
+        if(minimumDataTime==0 || millis < minimumDataTime)
+        {
+            minimumDataTime = millis;
+        }
 
         var existingNetworkData = [];
         if (host in networkMap) {
             existingNetworkData = networkMap[host];
         }
         existingNetworkData.push({
-            date: new Date(sigarMetrics[x].timestamp),
+            date: new Date(millis),
             value: parseFloat(sigarMetrics[x].kBytesRxPerSecond) + parseFloat(sigarMetrics[x].kBytesTxPerSecond)
         });
         networkMap[host] = existingNetworkData;
@@ -32,7 +57,7 @@ function drawSigarMetrics(sigarMetrics) {
             existingDiskData = diskMap[host];
         }
         existingDiskData.push({
-            date: new Date(sigarMetrics[x].timestamp),
+            date: new Date(millis),
             value: parseFloat(sigarMetrics[x].kBytesWrittenPerSecond) + parseFloat(sigarMetrics[x].kBytesReadPerSecond)
         })
         diskMap[host] = existingDiskData;
@@ -42,7 +67,7 @@ function drawSigarMetrics(sigarMetrics) {
             existingCpuData = cpuMap[host];
         }
         existingCpuData.push({
-            date: new Date(sigarMetrics[x].timestamp),
+            date: new Date(millis),
             value: parseFloat(sigarMetrics[x].cpu)
         })
         cpuMap[host] = existingCpuData;
@@ -52,12 +77,32 @@ function drawSigarMetrics(sigarMetrics) {
             existingRamData = ramMap[host];
         }
         existingRamData.push({
-            date: new Date(sigarMetrics[x].timestamp),
+            date: new Date(millis),
             value: parseFloat(sigarMetrics[x].ram)
         })
         ramMap[host] = existingRamData;
     }
     for (var host in networkMap) {
+        if(minimumSubmittedValue<minimumDataTime)
+        {
+            networkMap[host].push({
+                date: new Date(minimumSubmittedValue-3000),
+                value: 0
+            })
+            diskMap[host].push({
+                date: new Date(minimumSubmittedValue-3000),
+                value: 0
+            })
+            cpuMap[host].push({
+                date: new Date(minimumSubmittedValue-3000),
+                value: 0
+            })
+            ramMap[host].push({
+                date: new Date(minimumSubmittedValue-3000),
+                value: 0
+            })
+        }
+
         legend.push(host);
         newtworkData.push(networkMap[host]);
         diskData.push(diskMap[host]);
@@ -78,6 +123,7 @@ function drawSigarMetrics(sigarMetrics) {
         y_extended_ticks: true,
         height: 300,
         legend: legend,
+        markers: markers,
         target: '#sigar-network-metrics'
     }
 
@@ -97,6 +143,7 @@ function drawSigarMetrics(sigarMetrics) {
         y_extended_ticks: true,
         height: 300,
         legend: legend,
+        markers: markers,
         target: '#sigar-disk-metrics'
     }
 
@@ -116,6 +163,7 @@ function drawSigarMetrics(sigarMetrics) {
         y_extended_ticks: true,
         height: 300,
         legend: legend,
+        markers: markers,
         target: '#sigar-cpu-metrics'
     }
 
@@ -135,6 +183,7 @@ function drawSigarMetrics(sigarMetrics) {
         y_extended_ticks: true,
         height: 300,
         legend: legend,
+        markers: markers,
         target: '#sigar-ram-metrics'
     }
 

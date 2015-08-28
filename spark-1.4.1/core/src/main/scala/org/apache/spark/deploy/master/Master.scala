@@ -767,8 +767,36 @@ private[master] class Master(
           return None
         }
 
-      var sigarReplayListenerBus : Option[SigarReplayListenerBus] = None
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
+
+      val eventLogFilePrefix = EventLoggingListener.getLogPath(
+        eventLogDir, app.id, None, app.desc.eventLogCodec)
+      val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
+        EventLoggingListener.IN_PROGRESS))
+
+      if (inProgressExists) {
+        // Event logging is enabled for this application, but the application is still in progress
+        logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
+      }
+
+      val (eventLogFile, status) = if (inProgressExists) {
+        (eventLogFilePrefix + EventLoggingListener.IN_PROGRESS, " (in progress)")
+      } else {
+        (eventLogFilePrefix, " (completed)")
+      }
+
+      val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
+      val replayBus = new ReplayListenerBus()
+      var sigarReplayListenerBus : Option[SigarReplayListenerBus] = Some(new SigarReplayListenerBus())
+
+      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, sigarReplayListenerBus, new SecurityManager(conf),
+        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
+      val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
+      try {
+        replayBus.replay(logInput, eventLogFile, maybeTruncated)
+      } finally {
+        logInput.close()
+      }
 
       var customMetricsPath = conf.get("spark.sigar.dir","hdfs://localhost:9000/custom-metrics/");
       val jsonDirectory = new Path(customMetricsPath + "/" + app.id)
@@ -783,39 +811,9 @@ private[master] class Master(
           val oneNodeMetricsInput = new BufferedInputStream(fs.open(pathOfMetric))
           metricsList += oneNodeMetricsInput
         }
-        sigarReplayListenerBus = Some(new SigarReplayListenerBus())
-      } else sigarReplayListenerBus = None
-
-      logWarning("files found "+metricsList.mkString(","))
-
-      val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          eventLogDir, app.id, None, app.desc.eventLogCodec)
-      val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
-          EventLoggingListener.IN_PROGRESS))
-
-      if (inProgressExists) {
-        // Event logging is enabled for this application, but the application is still in progress
-        logWarning(s"Application $appName is still in progress, it may be terminated abnormally.")
-      }
-
-      val (eventLogFile, status) = if (inProgressExists) {
-        (eventLogFilePrefix + EventLoggingListener.IN_PROGRESS, " (in progress)")
-      } else {
-        (eventLogFilePrefix, " (completed)")
-      }
-
-      val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
-      logWarning("event file "+logInput)
-      val replayBus = new ReplayListenerBus()
-      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, sigarReplayListenerBus, new SecurityManager(conf),
-        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
-      val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
-      try {
-        replayBus.replay(logInput, eventLogFile, maybeTruncated)
         sigarReplayListenerBus.foreach(_.replay(metricsList, customMetricsPath + "/" + app.id, maybeTruncated))
-      } finally {
-        logInput.close()
       }
+
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
       // Application UI is successfully rebuilt, so link the Master UI to it
