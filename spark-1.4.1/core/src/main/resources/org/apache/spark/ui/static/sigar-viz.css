@@ -1,5 +1,10 @@
 div#sigar-network-metrics-container {
   margin-bottom: 30px;
+  width: 98%;
+}
+
+svg {
+  padding-left: 2%;
 }
 
 #sigar-network-metrics-container.collapsed {
@@ -12,6 +17,7 @@ span.expand-network {
 
 div#sigar-disk-metrics-container {
   margin-bottom: 30px;
+  width: 98%;
 }
 
 #sigar-disk-metrics-container.collapsed {
@@ -24,6 +30,7 @@ span.expand-disk {
 
 div#sigar-cpu-metrics-container {
   margin-bottom: 30px;
+  width: 98%;
 }
 
 #sigar-cpu-metrics-container.collapsed {
@@ -36,6 +43,7 @@ span.expand-cpu {
 
 div#sigar-ram-metrics-container {
   margin-bottom: 30px;
+  width: 98%;
 }
 
 #sigar-ram-metrics-container.collapsed {

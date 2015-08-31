@@ -68,7 +68,7 @@ function drawSigarMetrics(sigarMetrics, stageInfo) {
 
         if (minimumSubmittedValue < minimumDataTime) {
             var placeholder = {
-                date: new Date(minimumSubmittedValue - 3000),
+                date: new Date(minimumSubmittedValue-1000),
                 value: 0.0
             };
             networkMap[host].push(placeholder);
