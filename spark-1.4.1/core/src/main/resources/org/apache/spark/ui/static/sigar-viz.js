@@ -29,13 +29,12 @@ var markers = [];
 var minimumSubmittedValue = 0;
 var minimumSubmittedIndex = 0;
 
-function drawSigarMetrics(sigarMetrics,stageInfo) {
+function drawSigarMetrics(sigarMetrics, stageInfo) {
 
     for (var x in stageInfo) {
         var name = stageInfo[x].name;
         var submitted = new Date(stageInfo[x].submitted);
-        if(minimumSubmittedValue==0 || submitted<minimumSubmittedValue)
-        {
+        if (minimumSubmittedValue == 0 || submitted < minimumSubmittedValue) {
             minimumSubmittedValue = submitted;
             minimumSubmittedIndex = markers.length;
         }
@@ -49,41 +48,39 @@ function drawSigarMetrics(sigarMetrics,stageInfo) {
         var host = sigarMetrics[x].host;
         var millis = sigarMetrics[x].timestamp;
 
-        if(minimumDataTime==0 || millis < minimumDataTime)
-        {
+        if (minimumDataTime == 0 || millis < minimumDataTime) {
             minimumDataTime = millis;
         }
 
-        networkMap[host] = appendEntry(sigarMetrics[x],'totalNetwork',host,millis);
-        networkRxMap[host] = appendEntry(sigarMetrics[x],'kBytesRxPerSecond',host,millis);
-        networkTxMap[host] = appendEntry(sigarMetrics[x],'kBytesTxPerSecond',host,millis);
+        networkMap[host] = appendEntry(sigarMetrics[x], 'totalNetwork', host, millis);
+        networkRxMap[host] = appendEntry(sigarMetrics[x], 'kBytesRxPerSecond', host, millis);
+        networkTxMap[host] = appendEntry(sigarMetrics[x], 'kBytesTxPerSecond', host, millis);
 
-        diskMap[host] = appendEntry(sigarMetrics[x],'totalDisk',host,millis);
-        diskWrittenMap[host] = appendEntry(sigarMetrics[x],'kBytesWrittenPerSecond',host,millis);
-        diskReadMap[host] = appendEntry(sigarMetrics[x],'kBytesReadPerSecond',host,millis);
+        diskMap[host] = appendEntry(sigarMetrics[x], 'totalDisk', host, millis);
+        diskWrittenMap[host] = appendEntry(sigarMetrics[x], 'kBytesWrittenPerSecond', host, millis);
+        diskReadMap[host] = appendEntry(sigarMetrics[x], 'kBytesReadPerSecond', host, millis);
 
-        cpuMap[host] = appendEntry(sigarMetrics[x],'cpu',host,millis);
+        cpuMap[host] = appendEntry(sigarMetrics[x], 'cpu', host, millis);
 
-        ramMap[host] = appendEntry(sigarMetrics[x],'ram',host,millis);
+        ramMap[host] = appendEntry(sigarMetrics[x], 'ram', host, millis);
     }
     for (var host in networkMap) {
 
-        if(minimumSubmittedValue<minimumDataTime)
-        {
+        if (minimumSubmittedValue < minimumDataTime) {
             networkMap[host].push({
-                date: new Date(minimumSubmittedValue-3000),
+                date: new Date(minimumSubmittedValue - 3000),
                 value: 0.0
             });
             diskMap[host].push({
-                date: new Date(minimumSubmittedValue-3000),
+                date: new Date(minimumSubmittedValue - 3000),
                 value: 0.0
             });
             cpuMap[host].push({
-                date: new Date(minimumSubmittedValue-3000),
+                date: new Date(minimumSubmittedValue - 3000),
                 value: 0.0
             });
             ramMap[host].push({
-                date: new Date(minimumSubmittedValue-3000),
+                date: new Date(minimumSubmittedValue - 3000),
                 value: 0.0
             });
         }
@@ -101,19 +98,19 @@ function drawSigarMetrics(sigarMetrics,stageInfo) {
 
     var networkGraph = createChartByMode('totalNetwork');
     MG.data_graphic(networkGraph);
-    addEventListener("network",networkGraph);
+    addEventListener("network", networkGraph);
 
     var diskGraph = createChartByMode('totalDisk');
     MG.data_graphic(diskGraph);
-    addEventListener("disk",diskGraph);
+    addEventListener("disk", diskGraph);
 
     var cpuGraph = createChartByMode('cpu');
     MG.data_graphic(cpuGraph);
-    addEventListener("cpu",cpuGraph);
+    addEventListener("cpu", cpuGraph);
 
     var ramGraph = createChartByMode('ram');
     MG.data_graphic(ramGraph);
-    addEventListener("ram",ramGraph);
+    addEventListener("ram", ramGraph);
 
     $('#networkMode').on('change', function() {
         var graph = createChartByMode(this.value);
@@ -129,73 +126,74 @@ function drawSigarMetrics(sigarMetrics,stageInfo) {
 }
 
 function addEventListener(tag, graph) {
-    $("span.expand-"+tag).click(function () {
-        var status = ($("#sigar-"+tag+"-metrics-container").css('display'));
-        $("#sigar-"+tag+"-metrics-container").toggleClass('collapsed');
+    $("span.expand-" + tag).click(function() {
+        var status = ($("#sigar-" + tag + "-metrics-container").css('display'));
+        var statusNew = ($("#sigar-" + tag + "-metrics").css('display'));
+        $("#sigar-" + tag + "-metrics-container").toggleClass('collapsed');
         if (status == 'none') {
-            graph.full_width = true;
-            MG.data_graphic(graph);
+            if (!graph.full_width) {
+                graph.full_width = true;
+                MG.data_graphic(graph);
+            }
         }
         // Switch the class of the arrow from open to closed.
-        $(this).find('.expand-'+tag+'-arrow').toggleClass('arrow-open');
-        $(this).find('.expand-'+tag+'-arrow').toggleClass('arrow-closed');
+        $(this).find('.expand-' + tag + '-arrow').toggleClass('arrow-open');
+        $(this).find('.expand-' + tag + '-arrow').toggleClass('arrow-closed');
     });
 }
 
-function appendEntry(sigarMetricsRow,mode,host,millis) {
+function appendEntry(sigarMetricsRow, mode, host, millis) {
 
     var existingData = [];
-    if(mode=='totalNetwork')
-    {
+    if (mode == 'totalNetwork') {
         if (host in networkMap) {
             existingData = networkMap[host];
         }
-    } else if(mode=='kBytesRxPerSecond') {
+    } else if (mode == 'kBytesRxPerSecond') {
         if (host in networkRxMap) {
             existingData = networkRxMap[host];
         }
-    } else if(mode=='kBytesTxPerSecond') {
+    } else if (mode == 'kBytesTxPerSecond') {
         if (host in networkTxMap) {
             existingData = networkTxMap[host];
         }
-    } else if(mode=='totalDisk') {
+    } else if (mode == 'totalDisk') {
         if (host in diskMap) {
             existingData = diskMap[host];
         }
-    } else if(mode=='kBytesWrittenPerSecond') {
+    } else if (mode == 'kBytesWrittenPerSecond') {
         if (host in diskWrittenMap) {
             existingData = diskWrittenMap[host];
         }
-    } else if(mode=='kBytesReadPerSecond') {
+    } else if (mode == 'kBytesReadPerSecond') {
         if (host in diskReadMap) {
             existingData = diskReadMap[host];
         }
-    } else if(mode=='cpu') {
+    } else if (mode == 'cpu') {
         if (host in cpuMap) {
             existingData = cpuMap[host];
         }
-    } else if(mode=='ram') {
+    } else if (mode == 'ram') {
         if (host in ramMap) {
             existingData = ramMap[host];
         }
     }
     var value = 0.0;
-    if(mode=='totalNetwork')
-    {
+    if (mode == 'totalNetwork') {
         value = parseFloat(sigarMetricsRow.kBytesRxPerSecond) + parseFloat(sigarMetricsRow.kBytesTxPerSecond);
-    } else if(mode=='kBytesRxPerSecond') {
+    } else if (mode == 'kBytesRxPerSecond') {
         value = parseFloat(sigarMetricsRow.kBytesRxPerSecond);
-    } else if(mode=='kBytesTxPerSecond') {
+    } else if (mode == 'kBytesTxPerSecond') {
         value = parseFloat(sigarMetricsRow.kBytesTxPerSecond);
-    } else if(mode=='totalDisk') {
+    } else if (mode == 'totalDisk') {
         value = parseFloat(sigarMetricsRow.kBytesWrittenPerSecond) + parseFloat(sigarMetricsRow.kBytesReadPerSecond);
-    } else if(mode=='kBytesWrittenPerSecond') {
+    } else if (mode == 'kBytesWrittenPerSecond') {
         value = parseFloat(sigarMetricsRow.kBytesWrittenPerSecond);
-    } else if(mode=='kBytesReadPerSecond') {
+    } else if (mode == 'kBytesReadPerSecond') {
         value = parseFloat(sigarMetricsRow.kBytesReadPerSecond);
-    } else if(mode=='cpu') {
+    } else if (mode == 'cpu') {
         value = parseFloat(sigarMetricsRow.cpu);
-    } else if(mode=='ram') {
+    } else if (mode == 'ram') {
         value = parseFloat(sigarMetricsRow.ram);
     }
 
@@ -206,8 +204,7 @@ function appendEntry(sigarMetricsRow,mode,host,millis) {
     return existingData;
 }
 
-function createChartByMode(mode)
-{
+function createChartByMode(mode) {
     var graph = {
         title: "",
         description: "",
@@ -225,47 +222,46 @@ function createChartByMode(mode)
         target: ''
     };
 
-    if(mode=='totalNetwork')
-    {
-        graph.title="Total Network Traffic";
-        graph.description="Sum of kBytesRxPerSecond and kBytesTxPerSecond per host";
-        graph.data=networkData;
-        graph.target='#sigar-network-metrics';
-    } else if(mode=='kBytesRxPerSecond') {
-        graph.title="Incoming Network Traffic";
-        graph.description="kBytesRxPerSecond per host";
-        graph.data=networkRxData;
-        graph.target='#sigar-network-metrics';
-    } else if(mode=='kBytesTxPerSecond') {
-        graph.title="Outgoing Network Traffic";
-        graph.description="kBytesTxPerSecond per host";
-        graph.data=networkTxData;
-        graph.target='#sigar-network-metrics';
-    } else if(mode=='totalDisk') {
-        graph.title="Total Disk IO";
-        graph.description="Sum of kBytes Written and Read per host";
-        graph.data=diskData;
-        graph.target='#sigar-disk-metrics';
-    } else if(mode=='kBytesWrittenPerSecond') {
-        graph.title="Disk Writes";
-        graph.description="kBytes Written per host";
-        graph.data=diskWrittenData;
-        graph.target='#sigar-disk-metrics';
-    } else if(mode=='kBytesReadPerSecond') {
-        graph.title="Disk Reads";
-        graph.description="kBytes Read per host";
-        graph.data=diskReadData;
-        graph.target='#sigar-disk-metrics';
-    } else if(mode=='cpu') {
-        graph.title="CPU Utilization";
-        graph.description="Percentage of CPU Utilization per host";
-        graph.data=cpuData;
-        graph.target='#sigar-cpu-metrics';
-    } else if(mode=='ram') {
-        graph.title="RAM Utilization";
-        graph.description="Percentage of RAM Utilization per host";
-        graph.data=ramData;
-        graph.target='#sigar-ram-metrics';
+    if (mode == 'totalNetwork') {
+        graph.title = "Total Network Traffic";
+        graph.description = "Sum of kBytesRxPerSecond and kBytesTxPerSecond per host";
+        graph.data = networkData;
+        graph.target = '#sigar-network-metrics';
+    } else if (mode == 'kBytesRxPerSecond') {
+        graph.title = "Incoming Network Traffic";
+        graph.description = "kBytesRxPerSecond per host";
+        graph.data = networkRxData;
+        graph.target = '#sigar-network-metrics';
+    } else if (mode == 'kBytesTxPerSecond') {
+        graph.title = "Outgoing Network Traffic";
+        graph.description = "kBytesTxPerSecond per host";
+        graph.data = networkTxData;
+        graph.target = '#sigar-network-metrics';
+    } else if (mode == 'totalDisk') {
+        graph.title = "Total Disk IO";
+        graph.description = "Sum of kBytes Written and Read per host";
+        graph.data = diskData;
+        graph.target = '#sigar-disk-metrics';
+    } else if (mode == 'kBytesWrittenPerSecond') {
+        graph.title = "Disk Writes";
+        graph.description = "kBytes Written per host";
+        graph.data = diskWrittenData;
+        graph.target = '#sigar-disk-metrics';
+    } else if (mode == 'kBytesReadPerSecond') {
+        graph.title = "Disk Reads";
+        graph.description = "kBytes Read per host";
+        graph.data = diskReadData;
+        graph.target = '#sigar-disk-metrics';
+    } else if (mode == 'cpu') {
+        graph.title = "CPU Utilization";
+        graph.description = "Percentage of CPU Utilization per host";
+        graph.data = cpuData;
+        graph.target = '#sigar-cpu-metrics';
+    } else if (mode == 'ram') {
+        graph.title = "RAM Utilization";
+        graph.description = "Percentage of RAM Utilization per host";
+        graph.data = ramData;
+        graph.target = '#sigar-ram-metrics';
     }
 
     return graph;
