@@ -67,22 +67,18 @@ function drawSigarMetrics(sigarMetrics, stageInfo) {
     for (var host in networkMap) {
 
         if (minimumSubmittedValue < minimumDataTime) {
-            networkMap[host].push({
+            var placeholder = {
                 date: new Date(minimumSubmittedValue - 3000),
                 value: 0.0
-            });
-            diskMap[host].push({
-                date: new Date(minimumSubmittedValue - 3000),
-                value: 0.0
-            });
-            cpuMap[host].push({
-                date: new Date(minimumSubmittedValue - 3000),
-                value: 0.0
-            });
-            ramMap[host].push({
-                date: new Date(minimumSubmittedValue - 3000),
-                value: 0.0
-            });
+            };
+            networkMap[host].push(placeholder);
+            networkRxMap[host].push(placeholder);
+            networkTxMap[host].push(placeholder);
+            diskMap[host].push(placeholder);
+            diskReadMap[host].push(placeholder);
+            diskWrittenMap[host].push(placeholder);
+            cpuMap[host].push(placeholder);
+            ramMap[host].push(placeholder);
         }
 
         legend.push(host);
