@@ -1,8 +1,8 @@
-div#sigar-network-metrics {
+div#sigar-network-metrics-container {
   margin-bottom: 30px;
 }
 
-#sigar-network-metrics.collapsed {
+#sigar-network-metrics-container.collapsed {
   display: none;
 }
 
@@ -10,11 +10,11 @@ span.expand-network {
   cursor: pointer;
 }
 
-div#sigar-disk-metrics {
+div#sigar-disk-metrics-container {
   margin-bottom: 30px;
 }
 
-#sigar-disk-metrics.collapsed {
+#sigar-disk-metrics-container.collapsed {
   display: none;
 }
 
@@ -22,11 +22,11 @@ span.expand-disk {
   cursor: pointer;
 }
 
-div#sigar-cpu-metrics {
+div#sigar-cpu-metrics-container {
   margin-bottom: 30px;
 }
 
-#sigar-cpu-metrics.collapsed {
+#sigar-cpu-metrics-container.collapsed {
   display: none;
 }
 
@@ -34,11 +34,11 @@ span.expand-cpu {
   cursor: pointer;
 }
 
-div#sigar-ram-metrics {
+div#sigar-ram-metrics-container {
   margin-bottom: 30px;
 }
 
-#sigar-ram-metrics.collapsed {
+#sigar-ram-metrics-container.collapsed {
   display: none;
 }
 

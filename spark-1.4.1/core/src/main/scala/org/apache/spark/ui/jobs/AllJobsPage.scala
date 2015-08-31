@@ -369,7 +369,12 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
             Network
           </a>
         </span>
-        content ++= <div><div id="sigar-network-metrics" class="collapsed"></div><p></p></div>
+        content ++= <div><div id="sigar-network-metrics-container" class="collapsed">
+          <select id="networkMode">
+          <option value="totalNetwork">Total</option>
+          <option value="kBytesTxPerSecond">Outgoing</option>
+          <option value="kBytesRxPerSecond">Incoming</option>
+          </select><div id="sigar-network-metrics"></div></div><p></p></div>
 
         content ++= <span class="expand-disk">
           <span class="expand-disk-arrow arrow-closed"></span>
@@ -377,7 +382,13 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
             Disk
           </a>
         </span>
-        content ++= <div><div id="sigar-disk-metrics" class="collapsed"></div><p></p></div>
+        content ++= <div><div id="sigar-disk-metrics-container" class="collapsed">
+          <select id="diskMode">
+            <option value="totalDisk">Total</option>
+            <option value="kBytesWrittenPerSecond">Written</option>
+            <option value="kBytesReadPerSecond">Read</option>
+          </select>
+          <div id="sigar-disk-metrics"></div></div><p></p></div>
 
         content ++= <span class="expand-cpu">
           <span class="expand-cpu-arrow arrow-closed"></span>
@@ -385,7 +396,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
             CPU
           </a>
         </span>
-        content ++= <div><div id="sigar-cpu-metrics" class="collapsed"></div><p></p></div>
+        content ++= <div><div id="sigar-cpu-metrics-container" class="collapsed"><div id="sigar-cpu-metrics"></div></div><p></p></div>
 
         content ++= <span class="expand-ram">
           <span class="expand-ram-arrow arrow-closed"></span>
@@ -393,7 +404,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
             RAM
           </a>
         </span>
-        content ++= <div><div id="sigar-ram-metrics" class="collapsed"></div><p></p></div>
+        content ++= <div><div id="sigar-ram-metrics-container" class="collapsed"><div id="sigar-ram-metrics"></div></div><p></p></div>
 
         content ++= <script type="text/javascript">
           {Unparsed(s"drawSigarMetrics(${sigarJsonArrayAsStr},${stageInfoAsStr});")}
