@@ -166,7 +166,11 @@ Also in spark-defaults.conf you should specify the folder from which the UI will
 spark.sigar.dir                  hdfs://127.0.0.1:9000/custom-metrics
 ```
 
-**Important**: The folders spark.eventLog.dir, sigar.sink.hdfs.dir and spark.sigar.dir must already exist in the HDFS
+# **Important**: 
+
+The folders spark.eventLog.dir, sigar.sink.hdfs.dir and spark.sigar.dir must already exist in the HDFS.
+
+You should increase the limit for open files on the operating systems of the Master and the Workers
 
 ## Tested Environments
 
