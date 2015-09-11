@@ -31,6 +31,7 @@ import org.apache.spark.network.shuffle.protocol.UploadBlock
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage.{BlockId, StorageLevel}
 import org.apache.spark.util.Utils
+import org.apache.spark.executor.LowLevelMetrics
 
 /**
  * A BlockTransferService that uses Netty to fetch a set of blocks at at time.
@@ -86,6 +87,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
+          conf.lowMetrics.updateRequestMetrics(blockIds.size)
           new OneForOneBlockFetcher(client, appId, execId, blockIds.toArray, listener).start()
         }
       }
