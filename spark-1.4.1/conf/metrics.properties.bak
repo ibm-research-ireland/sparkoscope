@@ -118,13 +118,16 @@
 #*.sink.csv.directory=/tmp/
 
 # Worker instance overlap polling period
-sigar.sink.hdfs.class=org.apache.spark.metrics.sink.SigarSink
-sigar.sink.hdfs.pollPeriod = 20
-sigar.sink.hdfs.dir = hdfs://shamrock064:9000/custom-metrics
-sigar.sink.hdfs.unit = seconds
+# sigar.sink.hdfs.class=org.apache.spark.metrics.sink.SigarSink
+# sigar.sink.hdfs.pollPeriod = 20
+# sigar.sink.hdfs.dir = hdfs://shamrock064:9000/custom-metrics
+# sigar.sink.hdfs.unit = seconds
 
-sigar.sink.csv.class=org.apache.spark.metrics.sink.CsvSink
-sigar.sink.csv.period=30
+# sigar.sink.csv.class=org.apache.spark.metrics.sink.CsvSink
+# sigar.sink.csv.period=30
+
+*.sink.csv.class=org.apache.spark.metrics.sink.HDFSSink
+*.sink.csv.directory=hdfs://shamrock064:9000/custom-metrics
 
 #worker.sink.csv.period = 10
 #worker.sink.csv.directory = /tmp
