@@ -19,8 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import scala.collection.Map
-import scala.collection.mutable
+import scala.collection.{mutable, Map}
 
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
@@ -122,6 +121,9 @@ case class SigarMetrics(kBytesRxPerSecond: Double, kBytesTxPerSecond: Double,
                         cpu: Double, ram: Double,
                         host: String, timestamp: Long) extends SparkListenerEvent
 
+@DeveloperApi
+case class HDFSExecutorMetrics(values: Map[String,Any], host: String, timestamp: Long) extends SparkListenerEvent
+
 /**
  * An internal class that describes the metadata of an event log.
  * This event is not meant to be posted to listeners downstream.
@@ -218,6 +220,8 @@ trait SparkListener {
   def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) { }
 
   def onSigarMetrics(sigarMetric: SigarMetrics) {}
+
+  def onHDFSExecutorMetrics(hdfsExecutorMetrics: HDFSExecutorMetrics) {}
 }
 
 /**

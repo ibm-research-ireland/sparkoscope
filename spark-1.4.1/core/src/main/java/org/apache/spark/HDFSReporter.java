@@ -24,6 +24,8 @@ import org.apache.hadoop.fs.FileSystem;
  */
 public class HDFSReporter extends ScheduledReporter {
 
+    private String executorId;
+
     public static Builder forRegistry(MetricRegistry registry) {
         return new Builder(registry);
     }
@@ -231,7 +233,8 @@ public class HDFSReporter extends ScheduledReporter {
             if(!firstEntry.startsWith("app")) return;
             else appId = firstEntry;
 
-            String executorId = stringArr[1];
+            executorId = stringArr[1];
+
             try{
                 Integer.parseInt(executorId);
             } catch (Exception e)
@@ -259,13 +262,25 @@ public class HDFSReporter extends ScheduledReporter {
                 }
                 putLeaf(entries,0,bufferEntries,values[0]);
             } else {
-                String entryString = new JSONObject(bufferEntries).toString();
+
+                HashMap finalMapToWrite = new HashMap();
+                finalMapToWrite.put("timestamp",previousTimestamp);
+                finalMapToWrite.put("values", bufferEntries);
+                finalMapToWrite.put("host", localhost+"_"+executorId);
+                String entryString = new JSONObject(finalMapToWrite).toString();
                 writer.write(entryString);
                 writer.newLine();
                 writer.flush();
                 hadoopDataStream.flush();
                 hadoopDataStream.hsync();
                 bufferEntries.clear();
+
+                String[] keyArr = Arrays.copyOfRange(stringArr, 3, stringArr.length);
+                List<String> entries = new ArrayList<String>();
+                for (int i = 0; i < keyArr.length ; i++) {
+                    entries.add(keyArr[i]);
+                }
+                putLeaf(entries, 0, bufferEntries, values[0]);
             }
             previousTimestamp = timestamp;
         } catch (Exception e) {
@@ -334,7 +349,19 @@ public class HDFSReporter extends ScheduledReporter {
     public void stop(){
         super.stop();
         try {
-            if(writer!=null) writer.close();
+            if(writer!=null) {
+                HashMap finalMapToWrite = new HashMap();
+                finalMapToWrite.put("timestamp",previousTimestamp);
+                finalMapToWrite.put("values", bufferEntries);
+                finalMapToWrite.put("host", localhost+"_"+executorId);
+                String entryString = new JSONObject(finalMapToWrite).toString();
+                writer.write(entryString);
+                writer.newLine();
+                writer.flush();
+                hadoopDataStream.flush();
+                hadoopDataStream.hsync();
+                writer.close();
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }

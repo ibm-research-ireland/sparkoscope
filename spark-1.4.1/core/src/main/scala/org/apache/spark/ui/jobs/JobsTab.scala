@@ -28,6 +28,7 @@ private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
   val executorListener = parent.executorsListener
   val operationGraphListener = parent.operationGraphListener
   val sigarListener = parent.sigarListener
+  val hdfsExecutorMetricsListener = parent.hDFSExecutorMetricsListener
 
   def isFairScheduler: Boolean =
     jobProgresslistener.schedulingMode.exists(_ == SchedulingMode.FAIR)

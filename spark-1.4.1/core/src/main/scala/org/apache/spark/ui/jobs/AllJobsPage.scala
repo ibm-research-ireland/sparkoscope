@@ -18,11 +18,11 @@
 package org.apache.spark.ui.jobs
 
 import org.apache.spark.util.JsonProtocol
+import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods
-import org.json4s.jackson.JsonMethods._
 
+import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonDSL._
-import org.json4s.JsonAST._
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.xml.{Node, NodeSeq, Unparsed, Utility}
@@ -334,6 +334,25 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       var content = summary
       val executorListener = parent.executorListener
       val sigarListener = parent.sigarListener
+      var hdfsExecutorMetricsListener = parent.hdfsExecutorMetricsListener
+
+      println("hdfsExecutorMetricsData.size=>"+hdfsExecutorMetricsListener.hdfsExecutorMetricsData.size);
+      hdfsExecutorMetricsListener.hdfsExecutorMetricsData.foreach(x => println(x.values));
+
+      if(hdfsExecutorMetricsListener.hdfsExecutorMetricsData.size>0)
+        {
+          var hdfsExecutorMetricsDataJson = hdfsExecutorMetricsListener.hdfsExecutorMetricsData.map(e=> compact(JsonMethods.render(JsonProtocol.sparkEventToJson(e)))).mkString(",")
+          val hdfsExecutorMetricsDataJsonAsStr =
+            s"""
+               |[
+               |${hdfsExecutorMetricsDataJson}
+                |]
+        """.stripMargin
+
+          content ++= <script type="text/javascript">
+            {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr});")}
+          </script>
+        }
 
       if(sigarListener.sigarMetricsData.size > 0)
       {

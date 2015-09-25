@@ -29,6 +29,11 @@ var markers = [];
 var minimumSubmittedValue = 0;
 var minimumSubmittedIndex = 0;
 
+function parseExecutorMetrics(executorMetrics) {
+    console.log(executorMetrics);
+}
+
+
 function drawSigarMetrics(sigarMetrics, stageInfo) {
 
     for (var x in stageInfo) {

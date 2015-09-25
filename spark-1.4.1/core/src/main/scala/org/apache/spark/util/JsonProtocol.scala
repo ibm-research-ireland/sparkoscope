@@ -19,11 +19,12 @@ package org.apache.spark.util
 
 import java.util.{Properties, UUID}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.json4s.jackson.{Serialization, JsonMethods}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import org.json4s.DefaultFormats
+import org.json4s.{JsonDSL, DefaultFormats}
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
 
@@ -93,6 +94,9 @@ private[spark] object JsonProtocol {
         logStartToJson(logStart)
       case sigarMetrics: SigarMetrics =>
         sigarMetricsToJson(sigarMetrics)
+      case hdfsExecutorMetrics: HDFSExecutorMetrics =>
+        hdfsExecutorMetricsToJson(hdfsExecutorMetrics)
+
       // These aren't used, but keeps compiler happy
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
     }
@@ -233,6 +237,12 @@ private[spark] object JsonProtocol {
     ("ram" -> sigarMetrics.ram) ~
     ("host" -> sigarMetrics.host) ~
     ("timestamp" -> sigarMetrics.timestamp)
+  }
+
+  def hdfsExecutorMetricsToJson(hDFSExecutorMetrics: HDFSExecutorMetrics): JValue = {
+    ("timestamp" -> hDFSExecutorMetrics.timestamp ) ~
+    ("values" -> Serialization.write(hDFSExecutorMetrics.values) ) ~
+    ("host" -> hDFSExecutorMetrics.host)
   }
 
   /** ------------------------------------------------------------------- *
