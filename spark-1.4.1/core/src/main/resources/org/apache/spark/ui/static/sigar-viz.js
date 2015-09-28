@@ -29,8 +29,11 @@ var markers = [];
 var minimumSubmittedValue = 0;
 var minimumSubmittedIndex = 0;
 
-function parseExecutorMetrics(executorMetrics) {
-    console.log(executorMetrics);
+var executorMetrics = {};
+
+function parseExecutorMetrics(_executorMetrics) {
+
+    executorMetrics = _executorMetrics
 }
 
 

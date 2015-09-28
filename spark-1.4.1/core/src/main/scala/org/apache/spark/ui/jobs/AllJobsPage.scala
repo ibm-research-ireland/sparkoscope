@@ -349,6 +349,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
                 |]
         """.stripMargin
 
+          content ++= <div id="executor-metrics"></div>
+
           content ++= <script type="text/javascript">
             {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr});")}
           </script>
