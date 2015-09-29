@@ -3,8 +3,14 @@ div#sigar-network-metrics-container {
   width: 98%;
 }
 
+#executor-metrics {
+  margin-bottom: 30px;
+  width: 95%;
+}
+
 svg {
   padding-left: 2%;
+  padding-right: 2%;
 }
 
 #sigar-network-metrics-container.collapsed {
