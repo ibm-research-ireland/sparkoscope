@@ -333,7 +333,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
       var content = summary
       val executorListener = parent.executorListener
-      val sigarListener = parent.sigarListener
       var hdfsExecutorMetricsListener = parent.hdfsExecutorMetricsListener
 
       val stageInfo = completedJobs
@@ -378,65 +377,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
             {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr},${stageInfoAsStr});")}
           </script>
         }
-
-      if(sigarListener.sigarMetricsData.size > 0)
-      {
-        val sigarJsonArray = sigarListener.sigarMetricsData.map(sigarMetrics => compact(JsonMethods.render(JsonProtocol.sparkEventToJson(sigarMetrics)))).mkString(",")
-
-        val sigarJsonArrayAsStr =
-          s"""
-             |[
-             |${sigarJsonArray}
-             |]
-        """.stripMargin
-
-        content ++= <span class="expand-network">
-          <span class="expand-network-arrow arrow-closed"></span>
-          <a data-toggle="tooltip" title={ToolTips.NETWORK} data-placement="right">
-            Network
-          </a>
-        </span>
-        content ++= <div><div id="sigar-network-metrics-container" class="collapsed">
-          <select id="networkMode">
-          <option value="totalNetwork">Total</option>
-          <option value="kBytesTxPerSecond">Outgoing</option>
-          <option value="kBytesRxPerSecond">Incoming</option>
-          </select><div id="sigar-network-metrics"></div></div><p></p></div>
-
-        content ++= <span class="expand-disk">
-          <span class="expand-disk-arrow arrow-closed"></span>
-          <a data-toggle="tooltip" title={ToolTips.DISK} data-placement="right">
-            Disk
-          </a>
-        </span>
-        content ++= <div><div id="sigar-disk-metrics-container" class="collapsed">
-          <select id="diskMode">
-            <option value="totalDisk">Total</option>
-            <option value="kBytesWrittenPerSecond">Written</option>
-            <option value="kBytesReadPerSecond">Read</option>
-          </select>
-          <div id="sigar-disk-metrics"></div></div><p></p></div>
-
-        content ++= <span class="expand-cpu">
-          <span class="expand-cpu-arrow arrow-closed"></span>
-          <a data-toggle="tooltip" title={ToolTips.CPU} data-placement="right">
-            CPU
-          </a>
-        </span>
-        content ++= <div><div id="sigar-cpu-metrics-container" class="collapsed"><div id="sigar-cpu-metrics"></div></div><p></p></div>
-
-        content ++= <span class="expand-ram">
-          <span class="expand-ram-arrow arrow-closed"></span>
-          <a data-toggle="tooltip" title={ToolTips.RAM} data-placement="right">
-            RAM
-          </a>
-        </span>
-        content ++= <div><div id="sigar-ram-metrics-container" class="collapsed"><div id="sigar-ram-metrics"></div></div><p></p></div>
-
-        content ++= <script type="text/javascript">
-          {Unparsed(s"drawSigarMetrics(${sigarJsonArrayAsStr},${stageInfoAsStr});")}
-        </script>
-      }
 
       content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
           executorListener.executorIdToData, startTime)

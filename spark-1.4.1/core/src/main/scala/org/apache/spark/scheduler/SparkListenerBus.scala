@@ -58,8 +58,6 @@ private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkLi
         listener.onExecutorAdded(executorAdded)
       case executorRemoved: SparkListenerExecutorRemoved =>
         listener.onExecutorRemoved(executorRemoved)
-      case sigarMetrics : SigarMetrics =>
-        listener.onSigarMetrics(sigarMetrics)
       case hdfsExecutorMetrics: HDFSExecutorMetrics =>
         listener.onHDFSExecutorMetrics(hdfsExecutorMetrics)
       case logStart: SparkListenerLogStart => // ignore event log metadata

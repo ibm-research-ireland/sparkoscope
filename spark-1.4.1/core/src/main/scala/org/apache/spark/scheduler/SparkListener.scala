@@ -116,12 +116,6 @@ case class SparkListenerApplicationStart(appName: String, appId: Option[String],
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
 @DeveloperApi
-case class SigarMetrics(kBytesRxPerSecond: Double, kBytesTxPerSecond: Double,
-                        kBytesWrittenPerSecond: Double, kBytesReadPerSecond: Double,
-                        cpu: Double, ram: Double,
-                        host: String, timestamp: Long) extends SparkListenerEvent
-
-@DeveloperApi
 case class HDFSExecutorMetrics(values: Map[String,Any], host: String, timestamp: Long) extends SparkListenerEvent
 
 /**
@@ -218,8 +212,6 @@ trait SparkListener {
    * Called when the driver removes an executor.
    */
   def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) { }
-
-  def onSigarMetrics(sigarMetric: SigarMetrics) {}
 
   def onHDFSExecutorMetrics(hdfsExecutorMetrics: HDFSExecutorMetrics) {}
 }

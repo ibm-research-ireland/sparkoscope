@@ -46,7 +46,7 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.scheduler.{HDFSExecutorMetricsReplayListenerBus, SigarReplayListenerBus, EventLoggingListener, ReplayListenerBus}
+import org.apache.spark.scheduler.{HDFSExecutorMetricsReplayListenerBus, EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, SignalLogger, Utils}
 
@@ -788,10 +788,9 @@ private[master] class Master(
 
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
-      var sigarReplayListenerBus : Option[SigarReplayListenerBus] = Some(new SigarReplayListenerBus())
       var hdfsExecutorMetricsReplayBus : Option[HDFSExecutorMetricsReplayListenerBus] = Some(new HDFSExecutorMetricsReplayListenerBus())
 
-      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, sigarReplayListenerBus, hdfsExecutorMetricsReplayBus, new SecurityManager(conf),
+      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, hdfsExecutorMetricsReplayBus, new SecurityManager(conf),
         appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {

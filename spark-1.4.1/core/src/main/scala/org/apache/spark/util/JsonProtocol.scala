@@ -92,8 +92,6 @@ private[spark] object JsonProtocol {
         executorRemovedToJson(executorRemoved)
       case logStart: SparkListenerLogStart =>
         logStartToJson(logStart)
-      case sigarMetrics: SigarMetrics =>
-        sigarMetricsToJson(sigarMetrics)
       case hdfsExecutorMetrics: HDFSExecutorMetrics =>
         hdfsExecutorMetricsToJson(hdfsExecutorMetrics)
 
@@ -226,17 +224,6 @@ private[spark] object JsonProtocol {
   def logStartToJson(logStart: SparkListenerLogStart): JValue = {
     ("Event" -> Utils.getFormattedClassName(logStart)) ~
     ("Spark Version" -> SPARK_VERSION)
-  }
-
-  def sigarMetricsToJson(sigarMetrics: SigarMetrics): JValue = {
-    ("kBytesRxPerSecond" -> sigarMetrics.kBytesRxPerSecond) ~
-    ("kBytesTxPerSecond" -> sigarMetrics.kBytesTxPerSecond) ~
-    ("kBytesWrittenPerSecond" -> sigarMetrics.kBytesWrittenPerSecond) ~
-    ("kBytesReadPerSecond" -> sigarMetrics.kBytesReadPerSecond) ~
-    ("cpu" -> sigarMetrics.cpu) ~
-    ("ram" -> sigarMetrics.ram) ~
-    ("host" -> sigarMetrics.host) ~
-    ("timestamp" -> sigarMetrics.timestamp)
   }
 
   def hdfsExecutorMetricsToJson(hDFSExecutorMetrics: HDFSExecutorMetrics): JValue = {
@@ -866,19 +853,6 @@ private[spark] object JsonProtocol {
     val totalCores = (json \ "Total Cores").extract[Int]
     val logUrls = mapFromJson(json \ "Log Urls").toMap
     new ExecutorInfo(executorHost, totalCores, logUrls)
-  }
-
-  def sigarMetricsFromJson(json: JValue) : SigarMetrics = {
-    val prefix = "sigar"
-    val kBytesRxPerSecond = (json \ (prefix+".kBytesRxPerSecond")).extract[Double]
-    val kBytesTxPerSecond = (json \ (prefix+".kBytesTxPerSecond")).extract[Double]
-    val kBytesWrittenPerSecond = (json \ (prefix+".kBytesWrittenPerSecond")).extract[Double]
-    val kBytesReadPerSecond = (json \ (prefix+".kBytesReadPerSecond")).extract[Double]
-    val cpu = (json \ (prefix+".cpu")).extract[Double]
-    val ram = (json \ (prefix+".ram")).extract[Double]
-    val host = (json \ "host").extract[String]
-    val timestamp = (json \ "timestamp").extract[Long]
-    new SigarMetrics(kBytesRxPerSecond, kBytesTxPerSecond, kBytesWrittenPerSecond, kBytesReadPerSecond, cpu, ram, host, timestamp)
   }
 
   /** -------------------------------- *
