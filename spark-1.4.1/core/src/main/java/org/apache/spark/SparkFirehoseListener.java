@@ -114,5 +114,5 @@ public class SparkFirehoseListener implements SparkListener {
     }
 
     @Override
-    public final void onSigarMetrics(SigarMetrics sigarMetrics){ onEvent(sigarMetrics); }
+    public final void onHDFSExecutorMetrics(HDFSExecutorMetrics hdfsExecutorMetrics){ onEvent(hdfsExecutorMetrics);}
 }

@@ -19,11 +19,12 @@ package org.apache.spark.util
 
 import java.util.{Properties, UUID}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.json4s.jackson.{Serialization, JsonMethods}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import org.json4s.DefaultFormats
+import org.json4s.{JsonDSL, DefaultFormats}
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
 
@@ -91,8 +92,9 @@ private[spark] object JsonProtocol {
         executorRemovedToJson(executorRemoved)
       case logStart: SparkListenerLogStart =>
         logStartToJson(logStart)
-      case sigarMetrics: SigarMetrics =>
-        sigarMetricsToJson(sigarMetrics)
+      case hdfsExecutorMetrics: HDFSExecutorMetrics =>
+        hdfsExecutorMetricsToJson(hdfsExecutorMetrics)
+
       // These aren't used, but keeps compiler happy
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
     }
@@ -224,15 +226,10 @@ private[spark] object JsonProtocol {
     ("Spark Version" -> SPARK_VERSION)
   }
 
-  def sigarMetricsToJson(sigarMetrics: SigarMetrics): JValue = {
-    ("kBytesRxPerSecond" -> sigarMetrics.kBytesRxPerSecond) ~
-    ("kBytesTxPerSecond" -> sigarMetrics.kBytesTxPerSecond) ~
-    ("kBytesWrittenPerSecond" -> sigarMetrics.kBytesWrittenPerSecond) ~
-    ("kBytesReadPerSecond" -> sigarMetrics.kBytesReadPerSecond) ~
-    ("cpu" -> sigarMetrics.cpu) ~
-    ("ram" -> sigarMetrics.ram) ~
-    ("host" -> sigarMetrics.host) ~
-    ("timestamp" -> sigarMetrics.timestamp)
+  def hdfsExecutorMetricsToJson(hDFSExecutorMetrics: HDFSExecutorMetrics): JValue = {
+    ("timestamp" -> hDFSExecutorMetrics.timestamp ) ~
+    ("values" -> Serialization.write(hDFSExecutorMetrics.values) ) ~
+    ("host" -> hDFSExecutorMetrics.host)
   }
 
   /** ------------------------------------------------------------------- *
@@ -856,19 +853,6 @@ private[spark] object JsonProtocol {
     val totalCores = (json \ "Total Cores").extract[Int]
     val logUrls = mapFromJson(json \ "Log Urls").toMap
     new ExecutorInfo(executorHost, totalCores, logUrls)
-  }
-
-  def sigarMetricsFromJson(json: JValue) : SigarMetrics = {
-    val prefix = "sigar"
-    val kBytesRxPerSecond = (json \ (prefix+".kBytesRxPerSecond")).extract[Double]
-    val kBytesTxPerSecond = (json \ (prefix+".kBytesTxPerSecond")).extract[Double]
-    val kBytesWrittenPerSecond = (json \ (prefix+".kBytesWrittenPerSecond")).extract[Double]
-    val kBytesReadPerSecond = (json \ (prefix+".kBytesReadPerSecond")).extract[Double]
-    val cpu = (json \ (prefix+".cpu")).extract[Double]
-    val ram = (json \ (prefix+".ram")).extract[Double]
-    val host = (json \ "host").extract[String]
-    val timestamp = (json \ "timestamp").extract[Long]
-    new SigarMetrics(kBytesRxPerSecond, kBytesTxPerSecond, kBytesWrittenPerSecond, kBytesReadPerSecond, cpu, ram, host, timestamp)
   }
 
   /** -------------------------------- *

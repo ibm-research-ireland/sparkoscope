@@ -25,6 +25,7 @@ import scala.collection.mutable.LinkedHashSet
 
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
+import org.apache.spark.executor.LowLevelMetrics
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -52,6 +53,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def this() = this(true)
 
   private val settings = new ConcurrentHashMap[String, String]()
+
+  val lowMetrics = new LowLevelMetrics
 
   if (loadDefaults) {
     // Load any spark.* system properties

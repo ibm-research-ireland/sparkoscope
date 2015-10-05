@@ -1,15 +1,15 @@
-package org.apache.spark.deploy.worker
+package org.apache.spark.executor
 
 import java.util.Date
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.apache.spark.metrics.source.Source
-import org.hyperic.sigar.{DiskUsage, Sigar}
+import org.hyperic.sigar.Sigar
 
 /**
  * Created by johngouf on 06/08/15.
  */
-private[worker] class SigarSource(val worker: Worker) extends Source {
+private[spark] class SigarSource() extends Source {
   override def sourceName: String = "sigar"
 
   override val metricRegistry: MetricRegistry = new MetricRegistry()
@@ -38,7 +38,7 @@ private[worker] class SigarSource(val worker: Worker) extends Source {
   var previousBytesRead: Long = initialDiskMetrics.bytesRead
   var previousBytesReadMeasurement: Double = 0.0
 
-  metricRegistry.register(MetricRegistry.name("kBytesTxPerSecond"), new Gauge[Double] {
+  metricRegistry.register(MetricRegistry.name("sigar.kBytesTxPerSecond"), new Gauge[Double] {
     override def getValue: Double = {
       val currentMetrics: NetworkMetrics = getNetworkMetrics()
       val currentDate: Long = new Date().getTime
@@ -60,7 +60,7 @@ private[worker] class SigarSource(val worker: Worker) extends Source {
     }
   })
 
-  metricRegistry.register(MetricRegistry.name("kBytesRxPerSecond"), new Gauge[Double] {
+  metricRegistry.register(MetricRegistry.name("sigar.kBytesRxPerSecond"), new Gauge[Double] {
     override def getValue: Double = {
       val currentMetrics: NetworkMetrics = getNetworkMetrics()
       val currentDate: Long = new Date().getTime
@@ -82,7 +82,7 @@ private[worker] class SigarSource(val worker: Worker) extends Source {
     }
   })
 
-  metricRegistry.register(MetricRegistry.name("kBytesWrittenPerSecond"), new Gauge[Double] {
+  metricRegistry.register(MetricRegistry.name("sigar.kBytesWrittenPerSecond"), new Gauge[Double] {
     override def getValue: Double = {
       val currentMetrics: DiskMetrics = getDiskMetrics()
       val currentDate: Long = new Date().getTime
@@ -104,7 +104,7 @@ private[worker] class SigarSource(val worker: Worker) extends Source {
     }
   })
 
-  metricRegistry.register(MetricRegistry.name("kBytesReadPerSecond"), new Gauge[Double] {
+  metricRegistry.register(MetricRegistry.name("sigar.kBytesReadPerSecond"), new Gauge[Double] {
     override def getValue: Double = {
       val currentMetrics: DiskMetrics = getDiskMetrics()
       val currentDate: Long = new Date().getTime
@@ -126,28 +126,17 @@ private[worker] class SigarSource(val worker: Worker) extends Source {
     }
   })
 
-  metricRegistry.register(MetricRegistry.name("cpu"),new Gauge[Double] {
+  metricRegistry.register(MetricRegistry.name("sigar.cpu"),new Gauge[Double] {
     override def getValue: Double = {
       sigar.getCpuPerc.getCombined*100.0
     }
   })
 
-  metricRegistry.register(MetricRegistry.name("ram"),new Gauge[Double] {
+  metricRegistry.register(MetricRegistry.name("sigar.ram"),new Gauge[Double] {
     override def getValue: Double = {
       sigar.getMem.getUsedPercent
     }
   });
-
-  metricRegistry.register(MetricRegistry.name("appsRunning"), new Gauge[String] {
-    override def getValue: String = {
-      val allApps = worker.appDirectories;
-      val finishedApps = worker.finishedApps
-      finishedApps.foreach(finishedApp => {
-        allApps.remove(finishedApp)
-      })
-      "[" + worker.appDirectories.keySet.mkString(",") + "]"
-    }
-  })
 
   def getNetworkMetrics(): NetworkMetrics = {
     var bytesReceived = 0L

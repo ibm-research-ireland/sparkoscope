@@ -86,6 +86,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
+          conf.lowMetrics.updateRequestMetrics(blockIds.size)
           new OneForOneBlockFetcher(client, appId, execId, blockIds.toArray, listener).start()
         }
       }

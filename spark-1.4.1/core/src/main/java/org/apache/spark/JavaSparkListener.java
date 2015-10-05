@@ -80,5 +80,5 @@ public class JavaSparkListener implements SparkListener {
   public void onExecutorRemoved(SparkListenerExecutorRemoved executorRemoved) { }
 
   @Override
-  public void onSigarMetrics(SigarMetrics sigarMetrics) { }
+  public void onHDFSExecutorMetrics(HDFSExecutorMetrics hdfsExecutorMetrics) { }
 }

@@ -22,6 +22,8 @@ import java.lang.management.ManagementFactory
 import java.net.URL
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import org.apache.spark.executor.SigarSource
+import org.apache.spark.metrics.MetricsSystem
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -78,10 +80,13 @@ private[spark] class Executor(
 
   // Start worker thread pool
   private val threadPool = ThreadUtils.newDaemonCachedThreadPool("Executor task launch worker")
-  private val executorSource = new ExecutorSource(threadPool, executorId)
+  private val executorSource = new ExecutorSource(threadPool, executorId, conf.lowMetrics)
+
+  private val sigarSource = new SigarSource()
 
   if (!isLocal) {
     env.metricsSystem.registerSource(executorSource)
+    env.metricsSystem.registerSource(sigarSource)
     env.blockManager.initialize(conf.getAppId)
   }
 

@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.metrics.source.Source
 
 private[spark]
-class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends Source {
+class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String, lowMetrics: LowLevelMetrics) extends Source {
 
   private def fileStats(scheme: String) : Option[FileSystem.Statistics] =
     FileSystem.getAllStatistics().find(s => s.getScheme.equals(scheme))
@@ -62,6 +62,15 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
   // been in th pool
   metricRegistry.register(MetricRegistry.name("threadpool", "maxPool_size"), new Gauge[Int] {
     override def getValue: Int = threadPool.getMaximumPoolSize()
+  })
+
+  // Register low level netty metrics from the LowLevelMetrics accumulator
+  metricRegistry.register(MetricRegistry.name("netty", "avgBlocksPerRequest"), new Gauge[Int] {
+    override def getValue: Int = {
+      val ret = lowMetrics.getAvgBlocksPerRequest()
+      lowMetrics.reset()
+      ret
+    }
   })
 
   // Gauge for file system stats of this executor

@@ -1,20 +1,19 @@
 package org.apache.spark.scheduler
 
-import java.io.{InputStreamReader, BufferedReader, InputStream, IOException}
+import java.io.InputStream
+
+import org.apache.spark.Logging
+import scala.collection.{immutable, mutable}
+import scala.util.parsing.json._
 
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
-import com.fasterxml.jackson.core.JsonParseException
-import org.json4s.jackson.JsonMethods._
-
-import org.apache.spark.Logging
-import org.apache.spark.util.JsonProtocol
 
 /**
- * A SparkListenerBus that can be used to replay events from serialized event data.
+ * Created by johngouf on 21/09/15.
  */
-private[spark] class SigarReplayListenerBus extends SparkListenerBus with Logging {
+class HDFSExecutorMetricsReplayListenerBus extends SparkListenerBus with Logging {
 
   /**
    * Replay each event in the order maintained in the given stream. The stream is expected to
@@ -29,18 +28,31 @@ private[spark] class SigarReplayListenerBus extends SparkListenerBus with Loggin
    *        encountered, log file might not finished writing) or not
    */
   def replay(
-              logDataList: ListBuffer[InputStream],
+              logDataList: ListBuffer[(InputStream,String)],
               sourceName: String,
               maybeTruncated: Boolean = false): Unit = {
 
     logDataList.foreach(logData => {
       try {
-        for (line <- Source.fromInputStream(logData).getLines()) {
-          System.out.println(line)
-          postToAll(JsonProtocol.sigarMetricsFromJson(parse(line)))
+        var keyName = logData._2
+        for (line <- Source.fromInputStream(logData._1).getLines()) {
+          val hashMapParsed = JSON.parseFull(line)
+          val hashMap = {
+            hashMapParsed match {
+              case Some(m: Map[String, Any]) => m
+              case _ => new immutable.HashMap[String,Any]
+            }
+          }
+          val hdfsExecutorMetrics = new HDFSExecutorMetrics(
+            hashMap("values").asInstanceOf[Map[String,Any]],
+            hashMap("host").asInstanceOf[String],
+            hashMap("timestamp").asInstanceOf[Double].toLong)
+          postToAll(hdfsExecutorMetrics)
         }
       } catch {
         case ex: Exception => {
+          ex.printStackTrace();
+          logError(ex.toString)
           logWarning(s"Got JsonParseException from log file $logData")
         }
       }

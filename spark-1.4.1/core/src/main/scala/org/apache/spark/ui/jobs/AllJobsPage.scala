@@ -18,11 +18,11 @@
 package org.apache.spark.ui.jobs
 
 import org.apache.spark.util.JsonProtocol
+import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods
-import org.json4s.jackson.JsonMethods._
 
+import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonDSL._
-import org.json4s.JsonAST._
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.xml.{Node, NodeSeq, Unparsed, Utility}
@@ -333,83 +333,50 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
       var content = summary
       val executorListener = parent.executorListener
-      val sigarListener = parent.sigarListener
+      var hdfsExecutorMetricsListener = parent.hdfsExecutorMetricsListener
 
-      if(sigarListener.sigarMetricsData.size > 0)
-      {
-        val sigarJsonArray = sigarListener.sigarMetricsData.map(sigarMetrics => compact(JsonMethods.render(JsonProtocol.sparkEventToJson(sigarMetrics)))).mkString(",")
+      val stageInfo = completedJobs
+        .flatMap(job => job.stageIds.map(stage => (job,stage)))
+        .map(jobStage => {
+        val jobId = jobStage._1.jobId
+        val stageId = jobStage._2
+        val stageInfo = parent.jobProgresslistener.stageIdToInfo.get(stageId)
+        (jobId,stageInfo.get.name,stageInfo.get.submissionTime.get)
+      })
+        .map(job =>  compact(JsonMethods.render(("jobId" -> job._3) ~ ("name" -> job._2) ~ ("submitted" -> job._3)))).mkString(",")
 
-        val sigarJsonArrayAsStr =
-          s"""
-             |[
-             |${sigarJsonArray}
-             |]
+      val stageInfoAsStr =
+        s"""
+           |[
+           |${stageInfo}
+            |]
         """.stripMargin
 
-        val stageInfo = completedJobs
-          .flatMap(job => job.stageIds.map(stage => (job,stage)))
-          .map(jobStage => {
-           val jobId = jobStage._1.jobId
-           val stageId = jobStage._2
-           val stageInfo = parent.jobProgresslistener.stageIdToInfo.get(stageId)
-           (jobId,stageInfo.get.name,stageInfo.get.submissionTime.get)
-         })
-          .map(job =>  compact(JsonMethods.render(("jobId" -> job._3) ~ ("name" -> job._2) ~ ("submitted" -> job._3)))).mkString(",")
+      println("hdfsExecutorMetricsData.size=>"+hdfsExecutorMetricsListener.hdfsExecutorMetricsData.size);
+      hdfsExecutorMetricsListener.hdfsExecutorMetricsData.foreach(x => println(x.values));
 
-        val stageInfoAsStr =
-          s"""
-             |[
-             |${stageInfo}
-              |]
+      if(hdfsExecutorMetricsListener.hdfsExecutorMetricsData.size>0)
+        {
+          var hdfsExecutorMetricsDataJson = hdfsExecutorMetricsListener.hdfsExecutorMetricsData.map(e=> compact(JsonMethods.render(JsonProtocol.sparkEventToJson(e)))).mkString(",")
+          val hdfsExecutorMetricsDataJsonAsStr =
+            s"""
+               |[
+               |${hdfsExecutorMetricsDataJson}
+                |]
         """.stripMargin
 
-        content ++= <span class="expand-network">
-          <span class="expand-network-arrow arrow-closed"></span>
-          <a data-toggle="tooltip" title={ToolTips.NETWORK} data-placement="right">
-            Network
-          </a>
-        </span>
-        content ++= <div><div id="sigar-network-metrics-container" class="collapsed">
-          <select id="networkMode">
-          <option value="totalNetwork">Total</option>
-          <option value="kBytesTxPerSecond">Outgoing</option>
-          <option value="kBytesRxPerSecond">Incoming</option>
-          </select><div id="sigar-network-metrics"></div></div><p></p></div>
+          content ++= <div id="executor-parent">
+            <label><b>Executor Metrics:</b></label>
+            <select id="executor-metric-option">
+              <option value="NULL">-- Select --</option>
+            </select>
+            <div id="executor-metrics"></div>
+          </div>
 
-        content ++= <span class="expand-disk">
-          <span class="expand-disk-arrow arrow-closed"></span>
-          <a data-toggle="tooltip" title={ToolTips.DISK} data-placement="right">
-            Disk
-          </a>
-        </span>
-        content ++= <div><div id="sigar-disk-metrics-container" class="collapsed">
-          <select id="diskMode">
-            <option value="totalDisk">Total</option>
-            <option value="kBytesWrittenPerSecond">Written</option>
-            <option value="kBytesReadPerSecond">Read</option>
-          </select>
-          <div id="sigar-disk-metrics"></div></div><p></p></div>
-
-        content ++= <span class="expand-cpu">
-          <span class="expand-cpu-arrow arrow-closed"></span>
-          <a data-toggle="tooltip" title={ToolTips.CPU} data-placement="right">
-            CPU
-          </a>
-        </span>
-        content ++= <div><div id="sigar-cpu-metrics-container" class="collapsed"><div id="sigar-cpu-metrics"></div></div><p></p></div>
-
-        content ++= <span class="expand-ram">
-          <span class="expand-ram-arrow arrow-closed"></span>
-          <a data-toggle="tooltip" title={ToolTips.RAM} data-placement="right">
-            RAM
-          </a>
-        </span>
-        content ++= <div><div id="sigar-ram-metrics-container" class="collapsed"><div id="sigar-ram-metrics"></div></div><p></p></div>
-
-        content ++= <script type="text/javascript">
-          {Unparsed(s"drawSigarMetrics(${sigarJsonArrayAsStr},${stageInfoAsStr});")}
-        </script>
-      }
+          content ++= <script type="text/javascript">
+            {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr},${stageInfoAsStr});")}
+          </script>
+        }
 
       content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
           executorListener.executorIdToData, startTime)
