@@ -352,7 +352,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
             |]
         """.stripMargin
 
-      println("hdfsExecutorMetricsData.size=>"+hdfsExecutorMetricsListener.hdfsExecutorMetricsData.size);
       hdfsExecutorMetricsListener.hdfsExecutorMetricsData.foreach(x => println(x.values));
 
       if(hdfsExecutorMetricsListener.hdfsExecutorMetricsData.size>0)

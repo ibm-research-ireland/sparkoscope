@@ -34,7 +34,6 @@ class HDFSExecutorMetricsReplayListenerBus extends SparkListenerBus with Logging
 
     logDataList.foreach(logData => {
       try {
-        var keyName = logData._2
         for (line <- Source.fromInputStream(logData._1).getLines()) {
           val hashMapParsed = JSON.parseFull(line)
           val hashMap = {

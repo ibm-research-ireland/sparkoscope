@@ -788,7 +788,7 @@ private[master] class Master(
 
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
-      var hdfsExecutorMetricsReplayBus : Option[HDFSExecutorMetricsReplayListenerBus] = Some(new HDFSExecutorMetricsReplayListenerBus())
+      val hdfsExecutorMetricsReplayBus : Option[HDFSExecutorMetricsReplayListenerBus] = Some(new HDFSExecutorMetricsReplayListenerBus())
 
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, hdfsExecutorMetricsReplayBus, new SecurityManager(conf),
         appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
@@ -799,21 +799,8 @@ private[master] class Master(
         logInput.close()
       }
 
-      var customMetricsPath = conf.get("spark.sigar.dir","hdfs://localhost:9000/custom-metrics/");
+      val customMetricsPath = conf.get("spark.sigar.dir","hdfs://localhost:9000/custom-metrics/");
       val jsonDirectory = new Path(customMetricsPath + "/" + app.id)
-
-     /* var metricsList = new ListBuffer[InputStream]
-      if (fs.exists(jsonDirectory)) {
-        logWarning("custom metrics directory exists")
-        val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + app.id), false)
-
-        while (nodesList.hasNext) {
-          val pathOfMetric = nodesList.next().getPath
-          val oneNodeMetricsInput = new BufferedInputStream(fs.open(pathOfMetric))
-          metricsList += oneNodeMetricsInput
-        }
-        sigarReplayListenerBus.foreach(_.replay(metricsList, customMetricsPath + "/" + app.id, maybeTruncated))
-      }*/
 
       var inputStreamsAndKeys = new ListBuffer[(InputStream,String)]
       val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + app.id), false)
