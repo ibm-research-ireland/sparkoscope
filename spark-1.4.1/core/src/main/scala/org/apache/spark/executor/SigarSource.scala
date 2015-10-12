@@ -159,6 +159,8 @@ private[spark] class SigarSource() extends Source {
       val systemBytesRead = diskUsage.getDiskReadBytes
       if (systemBytesWritten > 0) {
         bytesWritten += systemBytesWritten
+      }
+      if (systemBytesRead > 0) {
         bytesRead += systemBytesRead
       }
     })

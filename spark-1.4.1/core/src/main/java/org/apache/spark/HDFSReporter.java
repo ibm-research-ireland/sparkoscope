@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.FileSystem;
 public class HDFSReporter extends ScheduledReporter {
 
     private String executorId;
+    private int rows = 0;
 
     public static Builder forRegistry(MetricRegistry registry) {
         return new Builder(registry);
@@ -263,6 +264,10 @@ public class HDFSReporter extends ScheduledReporter {
                 putLeaf(entries,0,bufferEntries,values[0]);
             } else {
 
+                rows++;
+
+                System.out.println("ROWS REPORTED ON APPEND= "+rows);
+
                 HashMap finalMapToWrite = new HashMap();
                 finalMapToWrite.put("timestamp",previousTimestamp);
                 finalMapToWrite.put("values", bufferEntries);
@@ -270,9 +275,14 @@ public class HDFSReporter extends ScheduledReporter {
                 String entryString = new JSONObject(finalMapToWrite).toString();
                 writer.write(entryString);
                 writer.newLine();
-                writer.flush();
-                hadoopDataStream.flush();
-                hadoopDataStream.hsync();
+
+                if(rows%20==0)
+                {
+                    writer.flush();
+                    hadoopDataStream.flush();
+                    hadoopDataStream.hsync();
+                }
+
                 bufferEntries.clear();
 
                 String[] keyArr = Arrays.copyOfRange(stringArr, 3, stringArr.length);
@@ -335,14 +345,18 @@ public class HDFSReporter extends ScheduledReporter {
     public void putLeaf(List<String> entries, int index, HashMap originalMap, Object value)
     {
         String entry = entries.get(index);
-        HashMap existing = (HashMap) originalMap.get(entry);
-        if(existing==null) existing = new HashMap();
-        if(index==entries.size()-1)
-        {
-            originalMap.put(entry,value);
+        Object originalObj = originalMap.get(entry);
+        if(originalObj instanceof HashMap || originalObj == null) {
+            HashMap existing = (HashMap) originalObj;
+            if (existing == null) existing = new HashMap();
+            if (index == entries.size() - 1) {
+                originalMap.put(entry, value);
+            } else {
+                originalMap.put(entry, existing);
+                putLeaf(entries, index + 1, existing, value);
+            }
         } else {
-            originalMap.put(entry,existing);
-            putLeaf(entries,index+1,existing,value);
+            System.out.println("UNKNOWN ENTRY= "+entry+","+originalMap+","+originalObj+","+originalMap.get(entry)+","+value);
         }
     }
 
@@ -350,6 +364,8 @@ public class HDFSReporter extends ScheduledReporter {
         super.stop();
         try {
             if(writer!=null) {
+                rows++;
+
                 HashMap finalMapToWrite = new HashMap();
                 finalMapToWrite.put("timestamp",previousTimestamp);
                 finalMapToWrite.put("values", bufferEntries);
@@ -361,6 +377,8 @@ public class HDFSReporter extends ScheduledReporter {
                 hadoopDataStream.flush();
                 hadoopDataStream.hsync();
                 writer.close();
+
+                System.out.println("ROWS REPORTED ON CLOSE= "+rows);
             }
         } catch (IOException e) {
             e.printStackTrace();

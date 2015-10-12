@@ -18,6 +18,7 @@ HADOOP_CONF_DIR=/disk/hadoop-2.7.0/etc/hadoop
 # - SPARK_LOCAL_DIRS, storage directories to use on this node for shuffle and RDD data
 # - MESOS_NATIVE_JAVA_LIBRARY, to point to your libmesos.so if you use Mesos
 SPARK_LOCAL_DIRS=/disk/spark-data
+SPARK_EXECUTOR_MEMORY=10G
 # Options read in YARN client mode
 # - HADOOP_CONF_DIR, to point Spark towards Hadoop configuration files
 # - SPARK_EXECUTOR_INSTANCES, Number of workers to start (Default: 2)

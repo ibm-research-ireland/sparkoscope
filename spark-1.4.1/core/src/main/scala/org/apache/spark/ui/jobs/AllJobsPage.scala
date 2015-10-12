@@ -352,8 +352,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
             |]
         """.stripMargin
 
-      hdfsExecutorMetricsListener.hdfsExecutorMetricsData.foreach(x => println(x.values));
-
       if(hdfsExecutorMetricsListener.hdfsExecutorMetricsData.size>0)
         {
           var hdfsExecutorMetricsDataJson = hdfsExecutorMetricsListener.hdfsExecutorMetricsData.map(e=> compact(JsonMethods.render(JsonProtocol.sparkEventToJson(e)))).mkString(",")
