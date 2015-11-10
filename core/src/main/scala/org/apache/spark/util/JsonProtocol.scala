@@ -94,6 +94,8 @@ private[spark] object JsonProtocol {
         logStartToJson(logStart)
       case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
         executorMetricsUpdateToJson(metricsUpdate)
+      case hdfsExecutorMetrics: HDFSExecutorMetrics =>
+        hdfsExecutorMetricsToJson(hdfsExecutorMetrics)
       case blockUpdated: SparkListenerBlockUpdated =>
         throw new MatchError(blockUpdated)  // TODO(ekl) implement this
     }
@@ -237,6 +239,12 @@ private[spark] object JsonProtocol {
       ("Stage Attempt ID" -> stageAttemptId) ~
       ("Task Metrics" -> taskMetricsToJson(metrics))
     })
+  }
+
+  def hdfsExecutorMetricsToJson(hDFSExecutorMetrics: HDFSExecutorMetrics): JValue = {
+    ("timestamp" -> hDFSExecutorMetrics.timestamp ) ~
+      ("values" -> Serialization.write(hDFSExecutorMetrics.values) ) ~
+      ("host" -> hDFSExecutorMetrics.host)
   }
 
   /** ------------------------------------------------------------------- *

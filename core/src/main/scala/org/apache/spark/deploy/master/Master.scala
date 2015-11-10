@@ -943,6 +943,20 @@ private[deploy] class Master(
 
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
+      val hdfsExecutorMetricsReplayBus : Option[HDFSExecutorMetricsReplayListenerBus] = Some(new HDFSExecutorMetricsReplayListenerBus())
+
+      val customMetricsPath = conf.get("spark.sigar.dir","hdfs://localhost:9000/custom-metrics/");
+      val jsonDirectory = new Path(customMetricsPath + "/" + app.id)
+
+      var inputStreamsAndKeys = new ListBuffer[(InputStream,String)]
+      val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + app.id), false)
+
+      while (nodesList.hasNext) {
+        val locatedFileStatus = nodesList.next();
+        val pathOfMetric = locatedFileStatus.getPath
+        val oneNodeMetricsInput = new BufferedInputStream(fs.open(pathOfMetric))
+        inputStreamsAndKeys += ((oneNodeMetricsInput,pathOfMetric.getName.replaceAll(".json","")))
+      }
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
         appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
@@ -951,6 +965,7 @@ private[deploy] class Master(
       } finally {
         logInput.close()
       }
+      hdfsExecutorMetricsReplayBus.foreach(_.replay(inputStreamsAndKeys, customMetricsPath + "/" + app.id, false))
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
       // Application UI is successfully rebuilt, so link the Master UI to it

@@ -162,6 +162,8 @@ private[spark] object UIUtils extends Logging {
     <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/metricsgraphics.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/sigar-viz.css")} type="text/css"/>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/vis.min.js")}></script>
@@ -170,6 +172,9 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/table.js")}></script>
     <script src={prependBaseUri("/static/additional-metrics.js")}></script>
     <script src={prependBaseUri("/static/timeline-view.js")}></script>
+    <script src={prependBaseUri("/static/d3.min.js")}></script>
+    <script src={prependBaseUri("/static/metricsgraphics.min.js")}></script>
+    <script src={prependBaseUri("/static/sigar-viz.js")}></script>
   }
 
   def vizHeaderNodes: Seq[Node] = {

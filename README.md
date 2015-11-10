@@ -96,3 +96,76 @@ distribution.
 
 Please refer to the [Configuration Guide](http://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.
+
+# Spark Viz
+
+## Installation/Configuration
+
+In all the nodes of the cluster Hyperic Sigar library must be installed. 
+Download from [http://sourceforge.net/projects/sigar/files/sigar/1.6/hyperic-sigar-1.6.4.zip/download](http://sourceforge.net/projects/sigar/files/sigar/1.6/hyperic-sigar-1.6.4.zip/download). 
+Extract the zip in any location.
+
+In spark-env.sh you need to set the HADOOP_CONF_DIR variable to the configuration directory of your hadoop installation. For instance:
+
+```
+HADOOP_CONF_DIR=/path/to/hadoop/etc/hadoop
+```
+
+Sigar metrics can be used as a source in the metrics.properties file:
+
+```
+sigar.sink.csv.class=org.apache.spark.metrics.sink.CsvSink
+```
+
+```
+sigar.sink.csv.period=20
+```
+
+The above configuration will output the Sigar metrics in csv files. Check the metrics.properties documentation for additional parameters of CsvSink.
+
+In order for the metrics to be stored in HDFS and therefore by retrieved by the UI, you need to have the following in the metrics.properties file:
+
+```
+sigar.sink.hdfs.class=org.apache.spark.metrics.sink.SigarSink
+```
+
+```
+sigar.sink.hdfs.pollPeriod = 20
+```
+
+```
+sigar.sink.hdfs.dir = hdfs://localhost:9000/custom-metrics
+```
+
+```
+sigar.sink.hdfs.unit = seconds
+```
+
+CsvSink is not required for the UI to display the metrics.
+
+In spark-defaults.conf you need to add to java.library.path parameter of the executor the directory of the native libraries of sigar. For instance:
+
+```
+spark.executor.extraJavaOptions -Djava.library.path=/path/to/hyperic-sigar-1.6.4/sigar-bin/lib/
+```
+
+Event logging must be enabled in spark-defaults.conf:
+
+```
+spark.eventLog.enabled           true
+```
+```
+spark.eventLog.dir               hdfs://127.0.0.1:9000/spark-logs
+```
+
+Also in spark-defaults.conf you should specify the folder from which the UI will read the metrics:
+
+```
+spark.sigar.dir                  hdfs://127.0.0.1:9000/custom-metrics
+```
+
+# **Important**: 
+
+The folders spark.eventLog.dir, sigar.sink.hdfs.dir and spark.sigar.dir must already exist in the HDFS.
+
+You should increase the limit for open files on the operating systems of the Master and the Workers

@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.netty
 
+import org.apache.spark.executor.LowLevelMetrics
+
 import scala.collection.JavaConversions._
 import scala.concurrent.{Future, Promise}
 
@@ -42,6 +44,8 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
   private val serializer = new JavaSerializer(conf)
   private val authEnabled = securityManager.isAuthenticationEnabled()
   private val transportConf = SparkTransportConf.fromSparkConf(conf, numCores)
+
+  var lowLevelMetrics : LowLevelMetrics = _
 
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
@@ -86,6 +90,7 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
+          lowLevelMetrics.updateRequestMetrics(blockIds.size)
           new OneForOneBlockFetcher(client, appId, execId, blockIds.toArray, listener).start()
         }
       }

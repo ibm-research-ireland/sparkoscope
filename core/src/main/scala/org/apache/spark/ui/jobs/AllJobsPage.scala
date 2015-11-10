@@ -329,6 +329,47 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
       var content = summary
       val executorListener = parent.executorListener
+      var hdfsExecutorMetricsListener = parent.hdfsExecutorMetricsListener
+
+      val stageInfo = completedJobs
+        .flatMap(job => job.stageIds.map(stage => (job,stage)))
+        .map(jobStage => {
+          val jobId = jobStage._1.jobId
+          val stageId = jobStage._2
+          val stageInfo = parent.jobProgresslistener.stageIdToInfo.get(stageId)
+          (jobId,stageInfo.get.name,stageInfo.get.submissionTime.get)
+        })
+        .map(job =>  compact(JsonMethods.render(("jobId" -> job._3) ~ ("name" -> job._2) ~ ("submitted" -> job._3)))).mkString(",")
+
+      val stageInfoAsStr =
+        s"""
+           |[
+           |${stageInfo}
+           |]
+        """.stripMargin
+
+      if(hdfsExecutorMetricsListener.hdfsExecutorMetricsData.size>0)
+      {
+        var hdfsExecutorMetricsDataJson = hdfsExecutorMetricsListener.hdfsExecutorMetricsData.map(e=> compact(JsonMethods.render(JsonProtocol.sparkEventToJson(e)))).mkString(",")
+        val hdfsExecutorMetricsDataJsonAsStr =
+          s"""
+             |[
+             |${hdfsExecutorMetricsDataJson}
+             |]
+        """.stripMargin
+
+        content ++= <div id="executor-parent">
+          <label><b>Executor Metrics:</b></label>
+          <select id="executor-metric-option">
+            <option value="NULL">-- Select --</option>
+          </select>
+          <div id="executor-metrics"></div>
+        </div>
+
+        content ++= <script type="text/javascript">
+          {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr},${stageInfoAsStr});")}
+        </script>
+      }
       content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
           executorListener.executorIdToData, startTime)
 
