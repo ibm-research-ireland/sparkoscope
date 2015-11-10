@@ -61,7 +61,6 @@ public class OneForOneBlockFetcher {
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
-    logger.trace("Created fetch request {}", this.openMessage.toString());
   }
 
   /** Callback invoked on receipt of each chunk. We equate a single chunk to a single block. */
@@ -69,8 +68,7 @@ public class OneForOneBlockFetcher {
     @Override
     public void onSuccess(int chunkIndex, ManagedBuffer buffer) {
       // On receipt of a chunk, pass it upwards as a block.
-	logger.trace("Successfully obtained chunk {} of size {}", blockIds[chunkIndex], buffer.size());
-	listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
+      listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
     }
 
     @Override
