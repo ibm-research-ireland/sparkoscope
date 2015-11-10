@@ -180,7 +180,6 @@
     <hbase.deps.scope>compile</hbase.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
-    <session.executionRootDirectory></session.executionRootDirectory>
 
     <!--
       Overridable test home. So that you can call individual pom files directly without
