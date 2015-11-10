@@ -54,8 +54,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   private val settings = new ConcurrentHashMap[String, String]()
 
-  val lowMetrics = new LowLevelMetrics
-
   if (loadDefaults) {
     // Load any spark.* system properties
     for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {

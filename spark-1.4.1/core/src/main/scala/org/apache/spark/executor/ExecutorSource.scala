@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.metrics.source.Source
 
 private[spark]
-class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String, lowMetrics: LowLevelMetrics) extends Source {
+class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends Source {
 
   private def fileStats(scheme: String) : Option[FileSystem.Statistics] =
     FileSystem.getAllStatistics().find(s => s.getScheme.equals(scheme))
@@ -38,6 +38,8 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String, lowMetr
       override def getValue: T = fileStats(scheme).map(f).getOrElse(defaultValue)
     })
   }
+
+  val lowMetrics = new LowLevelMetrics
 
   override val metricRegistry = new MetricRegistry()
 
@@ -66,7 +68,7 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String, lowMetr
 
   // Register low level netty metrics from the LowLevelMetrics accumulator
   metricRegistry.register(MetricRegistry.name("netty", "avgBlocksPerRequest"), new Gauge[Int] {
-    override def getValue: Int = {
+    override def getValue: Double = {
       val ret = lowMetrics.getAvgBlocksPerRequest()
       lowMetrics.reset()
       ret

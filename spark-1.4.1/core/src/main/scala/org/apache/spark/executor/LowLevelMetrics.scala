@@ -23,7 +23,7 @@ class LowLevelMetrics extends Serializable {
   private var _reqNo: Int = 0
   private var _blockNo: Int = 0
 
-  def getAvgBlocksPerRequest() = if (_reqNo > 0) _blockNo / _reqNo else 0
+  def getAvgBlocksPerRequest() = if (_reqNo > 0) _blockNo * 1.0 / _reqNo else 0.0
   def updateRequestMetrics(blockNo: Int) {
     _reqNo += 1
     _blockNo += blockNo
