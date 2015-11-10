@@ -50,6 +50,7 @@ import org.apache.spark.scheduler.{HDFSExecutorMetricsReplayListenerBus, EventLo
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, SignalLogger, Utils}
 
+//noinspection ScalaStyle
 private[master] class Master(
     host: String,
     port: Int,
@@ -822,7 +823,6 @@ private[master] class Master(
     } catch {
       case fnf: FileNotFoundException =>
         // Event logging is enabled for this application, but no event logs are found
-        logWarning(fnf.getMessage)
         val title = s"Application history not found (${app.id})"
         var msg = s"No event logs found for application $appName in ${app.desc.eventLogDir.get}."
         logWarning(msg)

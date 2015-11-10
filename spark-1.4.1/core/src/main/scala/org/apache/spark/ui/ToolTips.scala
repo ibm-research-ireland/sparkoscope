@@ -80,22 +80,4 @@ private[spark] object ToolTips {
        multiple operations (e.g. two map() functions) if they can be pipelined. Some operations
        also create multiple RDDs internally. Cached RDDs are shown in green.
     """
-
-  val NETWORK =
-    """Shows the sum of RxKBytes and TxKBytes per second, per node
-    """
-
-  val DISK =
-    """Shows the sum of KBytes Written and Read per second, per node
-    """
-
-  val CPU =
-    """Shows the sum of the percentage of CPU Utilization per node
-    """
-
-  val RAM =
-    """Shows the sum of the percentage of RAM Utilization per node
-    """
-
-
 }
