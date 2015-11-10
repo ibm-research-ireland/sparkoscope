@@ -1,24 +1,12 @@
 # Set everything to be logged to the console
-log4j.rootCategory=WARN,console
+log4j.rootCategory=INFO, console
 log4j.appender.console=org.apache.log4j.ConsoleAppender
-log4j.appender.console.target=System.out
+log4j.appender.console.target=System.err
 log4j.appender.console.layout=org.apache.log4j.PatternLayout
 log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
 
-log4j.appender.file=org.apache.log4j.FileAppender
-log4j.appender.file.file=/tmp/log4j-block_manager-output.txt
-log4j.appender.file.layout=org.apache.log4j.PatternLayout
-log4j.appender.file.layout.ConversionPattern=%d{ABSOLUTE} %p %c{1}: %m%n
-
 # Settings to quiet third party logs that are too verbose
-log4j.logger.org.eclipse.jetty=WARN
-log4j.logger.org.eclipse.jetty.util.component.AbstractLifeCycle=ERROR
+log4j.logger.org.spark-project.jetty=WARN
+log4j.logger.org.spark-project.jetty.util.component.AbstractLifeCycle=ERROR
 log4j.logger.org.apache.spark.repl.SparkIMain$exprTyper=INFO
 log4j.logger.org.apache.spark.repl.SparkILoop$SparkILoopInterpreter=INFO
-
-log4j.logger.org.apache.spark.network.shuffle.OneForOneBlockFetcher=TRACE,file
-log4j.additivity.org.apache.spark.network.shuffle.OneForOneBlockFetcher=false
-#log4j.logger.org.apache.spark.storage=TRACE,file
-#log4j.additivity.org.apache.spark.storage=false
-#log4j.logger.org.apache.spark.rdd=TRACE,file
-#log4j.additivity.org.apache.spark.rdd=false
