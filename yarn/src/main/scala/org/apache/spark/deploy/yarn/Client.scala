@@ -86,7 +86,11 @@ private[spark] class Client(
   private val fireAndForget = isClusterMode &&
     !sparkConf.getBoolean("spark.yarn.submit.waitAppCompletion", true)
 
-  def stop(): Unit = yarnClient.stop()
+  def stop(): Unit = {
+    yarnClient.stop()
+    // Unset YARN mode system env variable, to allow switching between cluster types.
+    System.clearProperty("SPARK_YARN_MODE")
+  }
 
   /**
    * Submit an application running our ApplicationMaster to the ResourceManager.
@@ -318,7 +322,8 @@ private[spark] class Client(
         destName: Option[String] = None,
         targetDir: Option[String] = None,
         appMasterOnly: Boolean = false): (Boolean, String) = {
-      val localURI = new URI(path.trim())
+      val trimmedPath = path.trim()
+      val localURI = Utils.resolveURI(trimmedPath)
       if (localURI.getScheme != LOCAL_SCHEME) {
         if (addDistributedUri(localURI)) {
           val localPath = getQualifiedLocalPath(localURI, hadoopConf)
@@ -334,7 +339,7 @@ private[spark] class Client(
           (false, null)
         }
       } else {
-        (true, path.trim())
+        (true, trimmedPath)
       }
     }
 
@@ -555,10 +560,10 @@ private[spark] class Client(
         LOCALIZED_PYTHON_DIR)
     }
     (pySparkArchives ++ pyArchives).foreach { path =>
-      val uri = new URI(path)
+      val uri = Utils.resolveURI(path)
       if (uri.getScheme != LOCAL_SCHEME) {
         pythonPath += buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
-          new Path(path).getName())
+          new Path(uri).getName())
       } else {
         pythonPath += uri.getPath()
       }
@@ -1134,17 +1139,28 @@ object Client extends Logging {
     }
 
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
-      val userClassPath =
+      // in order to properly add the app jar when user classpath is first
+      // we have to do the mainJar separate in order to send the right thing
+      // into addFileToClasspath
+      val mainJar =
         if (args != null) {
-          getUserClasspath(Option(args.userJar), Option(args.addJars))
+          getMainJarUri(Option(args.userJar))
         } else {
-          getUserClasspath(sparkConf)
+          getMainJarUri(sparkConf.getOption(CONF_SPARK_USER_JAR))
         }
-      userClassPath.foreach { x =>
-        addFileToClasspath(sparkConf, x, null, env)
+      mainJar.foreach(addFileToClasspath(sparkConf, conf, _, APP_JAR, env))
+
+      val secondaryJars =
+        if (args != null) {
+          getSecondaryJarUris(Option(args.addJars))
+        } else {
+          getSecondaryJarUris(sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+        }
+      secondaryJars.foreach { x =>
+        addFileToClasspath(sparkConf, conf, x, null, env)
       }
     }
-    addFileToClasspath(sparkConf, new URI(sparkJar(sparkConf)), SPARK_JAR, env)
+    addFileToClasspath(sparkConf, conf, new URI(sparkJar(sparkConf)), SPARK_JAR, env)
     populateHadoopClasspath(conf, env)
     sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
@@ -1157,16 +1173,20 @@ object Client extends Logging {
    * @param conf Spark configuration.
    */
   def getUserClasspath(conf: SparkConf): Array[URI] = {
-    getUserClasspath(conf.getOption(CONF_SPARK_USER_JAR),
-      conf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+    val mainUri = getMainJarUri(conf.getOption(CONF_SPARK_USER_JAR))
+    val secondaryUris = getSecondaryJarUris(conf.getOption(CONF_SPARK_YARN_SECONDARY_JARS))
+    (mainUri ++ secondaryUris).toArray
   }
 
-  private def getUserClasspath(
-      mainJar: Option[String],
-      secondaryJars: Option[String]): Array[URI] = {
-    val mainUri = mainJar.orElse(Some(APP_JAR)).map(new URI(_))
-    val secondaryUris = secondaryJars.map(_.split(",")).toSeq.flatten.map(new URI(_))
-    (mainUri ++ secondaryUris).toArray
+  private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
+    mainJar.flatMap { path =>
+      val uri = Utils.resolveURI(path)
+      if (uri.getScheme == LOCAL_SCHEME) Some(uri) else None
+    }.orElse(Some(new URI(APP_JAR)))
+  }
+
+  private def getSecondaryJarUris(secondaryJars: Option[String]): Seq[URI] = {
+    secondaryJars.map(_.split(",")).toSeq.flatten.map(new URI(_))
   }
 
   /**
@@ -1175,15 +1195,17 @@ object Client extends Logging {
    * If an alternate name for the file is given, and it's not a "local:" file, the alternate
    * name will be added to the classpath (relative to the job's work directory).
    *
-   * If not a "local:" file and no alternate name, the environment is not modified.
+   * If not a "local:" file and no alternate name, the linkName will be added to the classpath.
    *
-   * @param conf      Spark configuration.
-   * @param uri       URI to add to classpath (optional).
-   * @param fileName  Alternate name for the file (optional).
-   * @param env       Map holding the environment variables.
+   * @param conf        Spark configuration.
+   * @param hadoopConf  Hadoop configuration.
+   * @param uri         URI to add to classpath (optional).
+   * @param fileName    Alternate name for the file (optional).
+   * @param env         Map holding the environment variables.
    */
   private def addFileToClasspath(
       conf: SparkConf,
+      hadoopConf: Configuration,
       uri: URI,
       fileName: String,
       env: HashMap[String, String]): Unit = {
@@ -1192,6 +1214,11 @@ object Client extends Logging {
     } else if (fileName != null) {
       addClasspathEntry(buildPath(
         YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), fileName), env)
+    } else if (uri != null) {
+      val localPath = getQualifiedLocalPath(uri, hadoopConf)
+      val linkName = Option(uri.getFragment()).getOrElse(localPath.getName())
+      addClasspathEntry(buildPath(
+        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), linkName), env)
     }
   }
 

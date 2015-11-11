@@ -594,6 +594,20 @@ Apart from these, the following properties are also available, and may be useful
     How many finished drivers the Spark UI and status APIs remember before garbage collecting.
   </td>
 </tr>
+<tr>
+  <td><code>spark.sql.ui.retainedExecutions</code></td>
+  <td>1000</td>
+  <td>
+    How many finished executions the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.ui.retainedBatches</code></td>
+  <td>1000</td>
+  <td>
+    How many finished batches the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
 </table>
 
 #### Compression and Serialization
@@ -1550,6 +1564,20 @@ Apart from these, the following properties are also available, and may be useful
     Number of threads used by RBackend to handle RPC calls from SparkR package.
   </td>
 </tr>
+<tr>
+  <td><code>spark.r.command</code></td>
+  <td>Rscript</td>
+  <td>
+    Executable for executing R scripts in cluster modes for both driver and workers.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.r.driver.command</code></td>
+  <td>spark.r.command</td>
+  <td>
+    Executable for executing R scripts in client modes for driver. Ignored in cluster modes.
+  </td>
+</tr>
 </table>
 
 #### Cluster Managers
@@ -1588,6 +1616,10 @@ The following variables can be set in `spark-env.sh`:
   <tr>
     <td><code>PYSPARK_DRIVER_PYTHON</code></td>
     <td>Python binary executable to use for PySpark in driver only (default is PYSPARK_PYTHON).</td>
+  </tr>
+  <tr>
+    <td><code>SPARKR_DRIVER_R</code></td>
+    <td>R binary executable to use for SparkR shell (default is <code>R</code>).</td>
   </tr>
   <tr>
     <td><code>SPARK_LOCAL_IP</code></td>

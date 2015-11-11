@@ -1745,4 +1745,33 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df1.withColumn("diff", lit(0)))
     }
   }
+
+  test("SPARK-10389: order by non-attribute grouping expression on Aggregate") {
+    withTempTable("src") {
+      Seq((1, 1), (-1, 1)).toDF("key", "value").registerTempTable("src")
+      checkAnswer(sql("SELECT MAX(value) FROM src GROUP BY key + 1 ORDER BY key + 1"),
+        Seq(Row(1), Row(1)))
+      checkAnswer(sql("SELECT MAX(value) FROM src GROUP BY key + 1 ORDER BY (key + 1) * 2"),
+        Seq(Row(1), Row(1)))
+    }
+  }
+
+  test("SPARK-11303: filter should not be pushed down into sample") {
+    val df = sqlContext.range(100)
+    List(true, false).foreach { withReplacement =>
+      val sampled = df.sample(withReplacement, 0.1, 1)
+      val sampledOdd = sampled.filter("id % 2 != 0")
+      val sampledEven = sampled.filter("id % 2 = 0")
+      assert(sampled.count() == sampledOdd.count() + sampledEven.count())
+    }
+  }
+
+  test("SPARK-11032: resolve having correctly") {
+    withTempTable("src") {
+      Seq(1 -> "a").toDF("i", "j").registerTempTable("src")
+      checkAnswer(
+        sql("SELECT MIN(t.i) FROM (SELECT * FROM src WHERE i > 0) t HAVING(COUNT(1) > 0)"),
+        Row(1))
+    }
+  }
 }

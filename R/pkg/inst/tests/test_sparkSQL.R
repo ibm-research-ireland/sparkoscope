@@ -585,6 +585,13 @@ test_that("select with column", {
   expect_equal(columns(df3), c("x"))
   expect_equal(count(df3), 3)
   expect_equal(collect(select(df3, "x"))[[1, 1]], "x")
+
+  df4 <- select(df, c("name", "age"))
+  expect_equal(columns(df4), c("name", "age"))
+  expect_equal(count(df4), 3)
+
+  expect_error(select(df, c("name", "age"), "name"),
+                "To select multiple columns, use a character vector or list for col")
 })
 
 test_that("subsetting", {
@@ -945,7 +952,7 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(names(joined2), c("age", "name", "name", "test"))
   expect_equal(count(joined2), 3)
 
-  joined3 <- join(df, df2, df$name == df2$name, "right_outer")
+  joined3 <- join(df, df2, df$name == df2$name, "rightouter")
   expect_equal(names(joined3), c("age", "name", "name", "test"))
   expect_equal(count(joined3), 4)
   expect_true(is.na(collect(orderBy(joined3, joined3$age))$age[2]))
@@ -956,11 +963,34 @@ test_that("join() and merge() on a DataFrame", {
   expect_equal(count(joined4), 4)
   expect_equal(collect(orderBy(joined4, joined4$name))$newAge[3], 24)
 
+  joined5 <- join(df, df2, df$name == df2$name, "leftouter")
+  expect_equal(names(joined5), c("age", "name", "name", "test"))
+  expect_equal(count(joined5), 3)
+  expect_true(is.na(collect(orderBy(joined5, joined5$age))$age[1]))
+
+  joined6 <- join(df, df2, df$name == df2$name, "inner")
+  expect_equal(names(joined6), c("age", "name", "name", "test"))
+  expect_equal(count(joined6), 3)
+
+  joined7 <- join(df, df2, df$name == df2$name, "leftsemi")
+  expect_equal(names(joined7), c("age", "name"))
+  expect_equal(count(joined7), 3)
+
+  joined8 <- join(df, df2, df$name == df2$name, "left_outer")
+  expect_equal(names(joined8), c("age", "name", "name", "test"))
+  expect_equal(count(joined8), 3)
+  expect_true(is.na(collect(orderBy(joined8, joined8$age))$age[1]))
+
+  joined9 <- join(df, df2, df$name == df2$name, "right_outer")
+  expect_equal(names(joined9), c("age", "name", "name", "test"))
+  expect_equal(count(joined9), 4)
+  expect_true(is.na(collect(orderBy(joined9, joined9$age))$age[2]))
+
   merged <- select(merge(df, df2, df$name == df2$name, "outer"),
                    alias(df$age + 5, "newAge"), df$name, df2$test)
   expect_equal(names(merged), c("newAge", "name", "test"))
   expect_equal(count(merged), 4)
-  expect_equal(collect(orderBy(merged, joined4$name))$newAge[3], 24)
+  expect_equal(collect(orderBy(merged, merged$name))$newAge[3], 24)
 })
 
 test_that("toJSON() returns an RDD of the correct values", {
