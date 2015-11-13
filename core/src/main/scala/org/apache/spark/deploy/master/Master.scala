@@ -17,13 +17,13 @@
 
 package org.apache.spark.deploy.master
 
-import java.io.FileNotFoundException
+import java.io.{InputStream, BufferedInputStream, FileNotFoundException}
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ListBuffer, ArrayBuffer, HashMap, HashSet}
 import scala.language.postfixOps
 import scala.util.Random
 
@@ -40,7 +40,7 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
+import org.apache.spark.scheduler.{HDFSExecutorMetricsReplayListenerBus, EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
@@ -957,7 +957,7 @@ private[deploy] class Master(
         val oneNodeMetricsInput = new BufferedInputStream(fs.open(pathOfMetric))
         inputStreamsAndKeys += ((oneNodeMetricsInput,pathOfMetric.getName.replaceAll(".json","")))
       }
-      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
+      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, hdfsExecutorMetricsReplayBus, new SecurityManager(conf),
         appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {

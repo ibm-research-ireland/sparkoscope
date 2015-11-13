@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.util.{Properties, UUID}
 
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.json4s.jackson.Serialization
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
