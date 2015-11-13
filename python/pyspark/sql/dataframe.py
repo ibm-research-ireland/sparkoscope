@@ -22,6 +22,7 @@ import random
 if sys.version >= '3':
     basestring = unicode = str
     long = int
+    from functools import reduce
 else:
     from itertools import imap as map
 
@@ -30,7 +31,7 @@ from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deseria
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql import since
-from pyspark.sql.types import _create_cls, _parse_datatype_json_string
+from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.types import *
@@ -82,15 +83,7 @@ class DataFrame(object):
         """
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
-            schema = self.schema
-
-            def applySchema(it):
-                cls = _create_cls(schema)
-                return map(cls, it)
-
-            self._lazy_rdd = rdd.mapPartitions(applySchema)
-
+            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
         return self._lazy_rdd
 
     @property
@@ -193,7 +186,11 @@ class DataFrame(object):
         StructType(List(StructField(age,IntegerType,true),StructField(name,StringType,true)))
         """
         if self._schema is None:
-            self._schema = _parse_datatype_json_string(self._jdf.schema().json())
+            try:
+                self._schema = _parse_datatype_json_string(self._jdf.schema().json())
+            except AttributeError as e:
+                raise Exception(
+                    "Unable to parse datatype from schema. %s" % e)
         return self._schema
 
     @since(1.3)
@@ -215,8 +212,7 @@ class DataFrame(object):
         :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
 
         >>> df.explain()
-        PhysicalRDD [age#0,name#1], MapPartitionsRDD[...] at applySchemaToPythonRDD at\
-          NativeMethodAccessorImpl.java:...
+        Scan PhysicalRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -227,7 +223,6 @@ class DataFrame(object):
         ...
         == Physical Plan ==
         ...
-        == RDD ==
         """
         if extended:
             print(self._jdf.queryExecution().toString())
@@ -242,8 +237,11 @@ class DataFrame(object):
         return self._jdf.isLocal()
 
     @since(1.3)
-    def show(self, n=20):
+    def show(self, n=20, truncate=True):
         """Prints the first ``n`` rows to the console.
+
+        :param n: Number of rows to show.
+        :param truncate: Whether truncate long strings and align cells right.
 
         >>> df
         DataFrame[age: int, name: string]
@@ -255,7 +253,7 @@ class DataFrame(object):
         |  5|  Bob|
         +---+-----+
         """
-        print(self._jdf.showString(n))
+        print(self._jdf.showString(n, truncate))
 
     def __repr__(self):
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -279,9 +277,7 @@ class DataFrame(object):
         """
         with SCCallSiteSync(self._sc) as css:
             port = self._sc._jvm.PythonRDD.collectAndServe(self._jdf.javaToPython().rdd())
-        rs = list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
-        cls = _create_cls(self.schema)
-        return [cls(r) for r in rs]
+        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -304,7 +300,10 @@ class DataFrame(object):
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        return self.limit(num).collect()
+        with SCCallSiteSync(self._sc) as css:
+            port = self._sc._jvm.org.apache.spark.sql.execution.EvaluatePython.takeAndServe(
+                self._jdf, num)
+        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -443,6 +442,42 @@ class DataFrame(object):
         rdd = self._jdf.sample(withReplacement, fraction, long(seed))
         return DataFrame(rdd, self.sql_ctx)
 
+    @since(1.5)
+    def sampleBy(self, col, fractions, seed=None):
+        """
+        Returns a stratified sample without replacement based on the
+        fraction given on each stratum.
+
+        :param col: column that defines strata
+        :param fractions:
+            sampling fraction for each stratum. If a stratum is not
+            specified, we treat its fraction as zero.
+        :param seed: random seed
+        :return: a new DataFrame that represents the stratified sample
+
+        >>> from pyspark.sql.functions import col
+        >>> dataset = sqlContext.range(0, 100).select((col("id") % 3).alias("key"))
+        >>> sampled = dataset.sampleBy("key", fractions={0: 0.1, 1: 0.2}, seed=0)
+        >>> sampled.groupBy("key").count().orderBy("key").show()
+        +---+-----+
+        |key|count|
+        +---+-----+
+        |  0|    3|
+        |  1|    8|
+        +---+-----+
+
+        """
+        if not isinstance(col, str):
+            raise ValueError("col must be a string, but got %r" % type(col))
+        if not isinstance(fractions, dict):
+            raise ValueError("fractions must be a dict but got %r" % type(fractions))
+        for k, v in fractions.items():
+            if not isinstance(k, (float, int, long, basestring)):
+                raise ValueError("key must be float, int, long, or string, but got %r" % type(k))
+            fractions[k] = float(v)
+        seed = seed if seed is not None else random.randint(0, sys.maxsize)
+        return DataFrame(self._jdf.stat().sampleBy(col, self._jmap(fractions), seed), self.sql_ctx)
+
     @since(1.4)
     def randomSplit(self, weights, seed=None):
         """Randomly splits this :class:`DataFrame` with the provided weights.
@@ -502,36 +537,51 @@ class DataFrame(object):
 
     @ignore_unicode_prefix
     @since(1.3)
-    def join(self, other, joinExprs=None, joinType=None):
+    def join(self, other, on=None, how=None):
         """Joins with another :class:`DataFrame`, using the given join expression.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
         :param other: Right side of the join
-        :param joinExprs: a string for join column name, or a join expression (Column).
-            If joinExprs is a string indicating the name of the join column,
-            the column must exist on both sides, and this performs an inner equi-join.
-        :param joinType: str, default 'inner'.
+        :param on: a string for join column name, a list of column names,
+            , a join expression (Column) or a list of Columns.
+            If `on` is a string or a list of string indicating the name of the join column(s),
+            the column(s) must exist on both sides, and this performs an inner equi-join.
+        :param how: str, default 'inner'.
             One of `inner`, `outer`, `left_outer`, `right_outer`, `semijoin`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
         [Row(name=None, height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
 
+        >>> cond = [df.name == df3.name, df.age == df3.age]
+        >>> df.join(df3, cond, 'outer').select(df.name, df3.age).collect()
+        [Row(name=u'Bob', age=5), Row(name=u'Alice', age=2)]
+
         >>> df.join(df2, 'name').select(df.name, df2.height).collect()
         [Row(name=u'Bob', height=85)]
+
+        >>> df.join(df4, ['name', 'age']).select(df.name, df.age).collect()
+        [Row(name=u'Bob', age=5)]
         """
 
-        if joinExprs is None:
+        if on is not None and not isinstance(on, list):
+            on = [on]
+
+        if on is None or len(on) == 0:
             jdf = self._jdf.join(other._jdf)
-        elif isinstance(joinExprs, basestring):
-            jdf = self._jdf.join(other._jdf, joinExprs)
+        elif isinstance(on[0], basestring):
+            jdf = self._jdf.join(other._jdf, self._jseq(on))
         else:
-            assert isinstance(joinExprs, Column), "joinExprs should be Column"
-            if joinType is None:
-                jdf = self._jdf.join(other._jdf, joinExprs._jc)
+            assert isinstance(on[0], Column), "on should be Column or list of Column"
+            if len(on) > 1:
+                on = reduce(lambda x, y: x.__and__(y), on)
             else:
-                assert isinstance(joinType, basestring), "joinType should be basestring"
-                jdf = self._jdf.join(other._jdf, joinExprs._jc, joinType)
+                on = on[0]
+            if how is None:
+                jdf = self._jdf.join(other._jdf, on._jc, "inner")
+            else:
+                assert isinstance(how, basestring), "how should be basestring"
+                jdf = self._jdf.join(other._jdf, on._jc, how)
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
@@ -675,8 +725,6 @@ class DataFrame(object):
         [Row(age=5, name=u'Bob')]
         """
         if isinstance(item, basestring):
-            if item not in self.columns:
-                raise IndexError("no such column: %s" % item)
             jc = self._jdf.apply(item)
             return Column(jc)
         elif isinstance(item, Column):
@@ -728,7 +776,7 @@ class DataFrame(object):
         This is a variant of :func:`select` that accepts SQL expressions.
 
         >>> df.selectExpr("age * 2", "abs(age)").collect()
-        [Row((age * 2)=4, Abs(age)=2), Row((age * 2)=10, Abs(age)=5)]
+        [Row((age * 2)=4, 'abs(age)=2), Row((age * 2)=10, 'abs(age)=5)]
         """
         if len(expr) == 1 and isinstance(expr[0], list):
             expr = expr[0]
@@ -778,11 +826,11 @@ class DataFrame(object):
             Each element should be a column name (string) or an expression (:class:`Column`).
 
         >>> df.groupBy().avg().collect()
-        [Row(AVG(age)=3.5)]
+        [Row(avg(age)=3.5)]
         >>> df.groupBy('name').agg({'age': 'mean'}).collect()
-        [Row(name=u'Alice', AVG(age)=2.0), Row(name=u'Bob', AVG(age)=5.0)]
+        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
         >>> df.groupBy(df.name).avg().collect()
-        [Row(name=u'Alice', AVG(age)=2.0), Row(name=u'Bob', AVG(age)=5.0)]
+        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
         >>> df.groupBy(['name', df.age]).count().collect()
         [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
         """
@@ -840,10 +888,10 @@ class DataFrame(object):
         (shorthand for ``df.groupBy.agg()``).
 
         >>> df.agg({"age": "max"}).collect()
-        [Row(MAX(age)=5)]
+        [Row(max(age)=5)]
         >>> from pyspark.sql import functions as F
         >>> df.agg(F.min(df.age)).collect()
-        [Row(MIN(age)=2)]
+        [Row(min(age)=2)]
         """
         return self.groupBy().agg(*exprs)
 
@@ -1116,7 +1164,7 @@ class DataFrame(object):
         non-zero pair frequencies will be returned.
         The first column of each row will be the distinct values of `col1` and the column names
         will be the distinct values of `col2`. The name of the first column will be `$col1_$col2`.
-        Pairs that have no occurrences will have `null` as their counts.
+        Pairs that have no occurrences will have zero as their counts.
         :func:`DataFrame.crosstab` and :func:`DataFrameStatFunctions.crosstab` are aliases.
 
         :param col1: The name of the first column. Distinct items will make the first item of
@@ -1157,7 +1205,9 @@ class DataFrame(object):
     @ignore_unicode_prefix
     @since(1.3)
     def withColumn(self, colName, col):
-        """Returns a new :class:`DataFrame` by adding a column.
+        """
+        Returns a new :class:`DataFrame` by adding a column or replacing the
+        existing column that has the same name.
 
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
@@ -1165,7 +1215,8 @@ class DataFrame(object):
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
         """
-        return self.select('*', col.alias(colName))
+        assert isinstance(col, Column), "col should be Column"
+        return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -1178,10 +1229,7 @@ class DataFrame(object):
         >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
         """
-        cols = [Column(_to_java_column(c)).alias(new)
-                if c == existing else c
-                for c in self.columns]
-        return self.select(*cols)
+        return DataFrame(self._jdf.withColumnRenamed(existing, new), self.sql_ctx)
 
     @since(1.4)
     @ignore_unicode_prefix
@@ -1300,6 +1348,11 @@ class DataFrameStatFunctions(object):
 
     freqItems.__doc__ = DataFrame.freqItems.__doc__
 
+    def sampleBy(self, col, fractions, seed=None):
+        return self.df.sampleBy(col, fractions, seed)
+
+    sampleBy.__doc__ = DataFrame.sampleBy.__doc__
+
 
 def _test():
     import doctest
@@ -1314,6 +1367,8 @@ def _test():
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
     globs['df2'] = sc.parallelize([Row(name='Tom', height=80), Row(name='Bob', height=85)]).toDF()
+    globs['df3'] = sc.parallelize([Row(name='Alice', age=2),
+                                   Row(name='Bob', age=5)]).toDF()
     globs['df4'] = sc.parallelize([Row(name='Alice', age=10, height=80),
                                   Row(name='Bob', age=5, height=None),
                                   Row(name='Tom', age=None, height=None),

@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, Cast}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object StatFunctions extends Logging {
 
@@ -81,7 +82,7 @@ private[sql] object StatFunctions extends Logging {
         s"with dataType ${data.get.dataType} not supported.")
     }
     val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
-    df.select(columns: _*).rdd.aggregate(new CovarianceCounter)(
+    df.select(columns: _*).queryExecution.toRdd.aggregate(new CovarianceCounter)(
       seqOp = (counter, row) => {
         counter.add(row.getDouble(0), row.getDouble(1))
       },
@@ -113,7 +114,7 @@ private[sql] object StatFunctions extends Logging {
       if (element == null) "null" else element.toString
     }
     // get the distinct values of column 2, so that we can make them the column names
-    val distinctCol2: Map[String, Int] =
+    val distinctCol2: Map[Any, Int] =
       counts.map(e => cleanElement(e.get(1))).distinct.zipWithIndex.toMap
     val columnSize = distinctCol2.size
     require(columnSize < 1e4, s"The number of distinct values for $col2, can't " +
@@ -128,7 +129,7 @@ private[sql] object StatFunctions extends Logging {
         countsRow.setLong(columnIndex + 1, row.getLong(2))
       }
       // the value of col1 is the first value, the rest are the counts
-      countsRow.setString(0, cleanElement(col1Item))
+      countsRow.update(0, UTF8String.fromString(cleanElement(col1Item)))
       countsRow
     }.toSeq
     // Back ticks can't exist in DataFrame column names, therefore drop them. To be able to accept
@@ -139,7 +140,7 @@ private[sql] object StatFunctions extends Logging {
     // In the map, the column names (._1) are not ordered by the index (._2). This was the bug in
     // SPARK-8681. We need to explicitly sort by the column index and assign the column names.
     val headerNames = distinctCol2.toSeq.sortBy(_._2).map { r =>
-      StructField(cleanColumnName(r._1), LongType)
+      StructField(cleanColumnName(r._1.toString), LongType)
     }
     val schema = StructType(StructField(tableName, StringType) +: headerNames)
 

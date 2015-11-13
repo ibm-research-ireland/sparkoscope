@@ -86,6 +86,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         case JobExecutionStatus.SUCCEEDED => "succeeded"
         case JobExecutionStatus.FAILED => "failed"
         case JobExecutionStatus.RUNNING => "running"
+        case JobExecutionStatus.UNKNOWN => "unknown"
       }
 
       // The timeline library treats contents as HTML, so we have to escape them; for the
@@ -230,6 +231,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       }
       val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
       val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
+      val jobDescription = UIUtils.makeDescription(lastStageDescription, parent.basePath)
+
       val detailUrl =
         "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
       <tr id={"job-" + job.jobId}>
@@ -237,7 +240,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
         </td>
         <td>
-          <span class="description-input" title={lastStageDescription}>{lastStageDescription}</span>
+          {jobDescription}
           <a href={detailUrl} class="name-link">{lastStageName}</a>
         </td>
         <td sorttable_customkey={job.submissionTime.getOrElse(-1).toString}>
@@ -338,43 +341,42 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val stageInfo = completedJobs
         .flatMap(job => job.stageIds.map(stage => (job,stage)))
         .map(jobStage => {
-        val jobId = jobStage._1.jobId
-        val stageId = jobStage._2
-        val stageInfo = parent.jobProgresslistener.stageIdToInfo.get(stageId)
-        (jobId,stageInfo.get.name,stageInfo.get.submissionTime.get)
-      })
+          val jobId = jobStage._1.jobId
+          val stageId = jobStage._2
+          val stageInfo = parent.jobProgresslistener.stageIdToInfo.get(stageId)
+          (jobId,stageInfo.get.name,stageInfo.get.submissionTime.get)
+        })
         .map(job =>  compact(JsonMethods.render(("jobId" -> job._3) ~ ("name" -> job._2) ~ ("submitted" -> job._3)))).mkString(",")
 
       val stageInfoAsStr =
         s"""
            |[
            |${stageInfo}
-            |]
+           |]
         """.stripMargin
 
       if(hdfsExecutorMetricsListener.hdfsExecutorMetricsData.size>0)
-        {
-          var hdfsExecutorMetricsDataJson = hdfsExecutorMetricsListener.hdfsExecutorMetricsData.map(e=> compact(JsonMethods.render(JsonProtocol.sparkEventToJson(e)))).mkString(",")
-          val hdfsExecutorMetricsDataJsonAsStr =
-            s"""
-               |[
-               |${hdfsExecutorMetricsDataJson}
-                |]
+      {
+        var hdfsExecutorMetricsDataJson = hdfsExecutorMetricsListener.hdfsExecutorMetricsData.map(e=> compact(JsonMethods.render(JsonProtocol.sparkEventToJson(e)))).mkString(",")
+        val hdfsExecutorMetricsDataJsonAsStr =
+          s"""
+             |[
+             |${hdfsExecutorMetricsDataJson}
+             |]
         """.stripMargin
 
-          content ++= <div id="executor-parent">
-            <label><b>Executor Metrics:</b></label>
-            <select id="executor-metric-option">
-              <option value="NULL">-- Select --</option>
-            </select>
-            <div id="executor-metrics"></div>
-          </div>
+        content ++= <div id="executor-parent">
+          <label><b>Executor Metrics:</b></label>
+          <select id="executor-metric-option">
+            <option value="NULL">-- Select --</option>
+          </select>
+          <div id="executor-metrics"></div>
+        </div>
 
-          content ++= <script type="text/javascript">
-            {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr},${stageInfoAsStr});")}
-          </script>
-        }
-
+        content ++= <script type="text/javascript">
+          {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr},${stageInfoAsStr});")}
+        </script>
+      }
       content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
           executorListener.executorIdToData, startTime)
 

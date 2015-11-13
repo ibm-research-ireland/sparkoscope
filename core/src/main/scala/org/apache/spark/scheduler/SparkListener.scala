@@ -19,13 +19,14 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import scala.collection.{mutable, Map}
+import scala.collection.Map
+import scala.collection.mutable
 
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 import org.apache.spark.util.{Distribution, Utils}
 
 @DeveloperApi
@@ -97,6 +98,9 @@ case class SparkListenerExecutorAdded(time: Long, executorId: String, executorIn
 case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: String)
   extends SparkListenerEvent
 
+@DeveloperApi
+case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
+
 /**
  * Periodic updates from executors.
  * @param execId executor id
@@ -109,8 +113,13 @@ case class SparkListenerExecutorMetricsUpdate(
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerApplicationStart(appName: String, appId: Option[String],
-   time: Long, sparkUser: String, appAttemptId: Option[String]) extends SparkListenerEvent
+case class SparkListenerApplicationStart(
+    appName: String,
+    appId: Option[String],
+    time: Long,
+    sparkUser: String,
+    appAttemptId: Option[String],
+    driverLogs: Option[Map[String, String]] = None) extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
@@ -213,6 +222,14 @@ trait SparkListener {
    */
   def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) { }
 
+  /**
+   * Called when the driver receives a block update info.
+   */
+  def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated) { }
+
+  /**
+    * Called when we have a new entry for the Executor Metrics
+    */
   def onHDFSExecutorMetrics(hdfsExecutorMetrics: HDFSExecutorMetrics) {}
 }
 

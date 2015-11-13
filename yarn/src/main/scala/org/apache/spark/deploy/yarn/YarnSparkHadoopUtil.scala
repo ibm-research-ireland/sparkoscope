@@ -33,7 +33,8 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-import org.apache.hadoop.yarn.api.records.{Priority, ApplicationAccessType}
+import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
+import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -136,6 +137,10 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     tokenRenewer.foreach(_.stop())
   }
 
+  private[spark] def getContainerId: ContainerId = {
+    val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
+    ConverterUtils.toContainerId(containerIdString)
+  }
 }
 
 object YarnSparkHadoopUtil {
@@ -272,6 +277,29 @@ object YarnSparkHadoopUtil {
 
   def getClassPathSeparator(): String = {
     classPathSeparatorField.get(null).asInstanceOf[String]
+  }
+
+  /**
+   * Getting the initial target number of executors depends on whether dynamic allocation is
+   * enabled.
+   */
+  def getInitialTargetExecutorNumber(conf: SparkConf): Int = {
+    if (Utils.isDynamicAllocationEnabled(conf)) {
+      val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
+      val initialNumExecutors =
+        conf.getInt("spark.dynamicAllocation.initialExecutors", minNumExecutors)
+      val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors", Int.MaxValue)
+      require(initialNumExecutors >= minNumExecutors && initialNumExecutors <= maxNumExecutors,
+        s"initial executor number $initialNumExecutors must between min executor number" +
+          s"$minNumExecutors and max executor number $maxNumExecutors")
+
+      initialNumExecutors
+    } else {
+      val targetNumExecutors =
+        sys.env.get("SPARK_EXECUTOR_INSTANCES").map(_.toInt).getOrElse(DEFAULT_NUMBER_EXECUTORS)
+      // System property can override environment variable.
+      conf.getInt("spark.executor.instances", targetNumExecutors)
+    }
   }
 }
 

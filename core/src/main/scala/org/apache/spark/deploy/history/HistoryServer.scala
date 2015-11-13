@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
+import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import com.google.common.cache._
@@ -29,7 +30,7 @@ import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, Applica
   UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.{SignalLogger, Utils}
+import org.apache.spark.util.{ShutdownHookManager, SignalLogger, Utils}
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -173,6 +174,13 @@ class HistoryServer(
     getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
 
+  override def writeEventLogs(
+      appId: String,
+      attemptId: Option[String],
+      zipStream: ZipOutputStream): Unit = {
+    provider.writeEventLogs(appId, attemptId, zipStream)
+  }
+
   /**
    * Returns the provider configuration to show in the listing page.
    *
@@ -220,7 +228,7 @@ object HistoryServer extends Logging {
 
     val providerName = conf.getOption("spark.history.provider")
       .getOrElse(classOf[FsHistoryProvider].getName())
-    val provider = Class.forName(providerName)
+    val provider = Utils.classForName(providerName)
       .getConstructor(classOf[SparkConf])
       .newInstance(conf)
       .asInstanceOf[ApplicationHistoryProvider]
@@ -230,7 +238,7 @@ object HistoryServer extends Logging {
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()
 
-    Utils.addShutdownHook { () => server.stop() }
+    ShutdownHookManager.addShutdownHook { () => server.stop() }
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }

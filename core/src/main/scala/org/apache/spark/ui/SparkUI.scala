@@ -139,7 +139,7 @@ private[spark] object SparkUI {
       securityManager: SecurityManager,
       appName: String,
       startTime: Long): SparkUI = {
-      create(Some(sc), conf, listenerBus, None, securityManager, appName,
+    create(Some(sc), conf, listenerBus, None, securityManager, appName,
       jobProgressListener = Some(jobProgressListener), startTime = startTime)
   }
 
@@ -151,7 +151,7 @@ private[spark] object SparkUI {
       appName: String,
       basePath: String,
       startTime: Long): SparkUI = {
-    create(None, conf, listenerBus, hdfsExecutorMetricsReplayListenerBus,  securityManager, appName, basePath, startTime = startTime)
+    create(None, conf, listenerBus, hdfsExecutorMetricsReplayListenerBus, securityManager, appName, basePath, startTime = startTime)
   }
 
   /**
@@ -190,7 +190,6 @@ private[spark] object SparkUI {
     listenerBus.addListener(executorsListener)
     listenerBus.addListener(storageListener)
     listenerBus.addListener(operationGraphListener)
-
     hdfsExecutorMetricsReplayListenerBus.foreach(_.addListener(hdfsExecutorMetricsListener))
 
     new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,

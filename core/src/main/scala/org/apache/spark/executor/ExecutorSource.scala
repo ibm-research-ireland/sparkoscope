@@ -67,7 +67,7 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
   })
 
   // Register low level netty metrics from the LowLevelMetrics accumulator
-  metricRegistry.register(MetricRegistry.name("netty", "avgBlocksPerRequest"), new Gauge[Int] {
+  metricRegistry.register(MetricRegistry.name("netty", "avgBlocksPerRequest"), new Gauge[Double] {
     override def getValue: Double = {
       val ret = lowMetrics.getAvgBlocksPerRequest()
       lowMetrics.reset()

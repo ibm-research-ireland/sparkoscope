@@ -24,7 +24,7 @@ import org.apache.spark.streaming.Time
  * :: DeveloperApi ::
  * Class having information on completed batches.
  * @param batchTime   Time of the batch
- * @param streamIdToNumRecords A map of input stream id to record number
+ * @param streamIdToInputInfo A map of input stream id to its input info
  * @param submissionTime  Clock time of when jobs of this batch was submitted to
  *                        the streaming scheduler queue
  * @param processingStartTime Clock time of when the first job of this batch started processing
@@ -33,11 +33,18 @@ import org.apache.spark.streaming.Time
 @DeveloperApi
 case class BatchInfo(
     batchTime: Time,
-    streamIdToNumRecords: Map[Int, Long],
+    streamIdToInputInfo: Map[Int, StreamInputInfo],
     submissionTime: Long,
     processingStartTime: Option[Long],
     processingEndTime: Option[Long]
   ) {
+
+  private var _failureReasons: Map[Int, String] = Map.empty
+
+  private var _numOutputOp: Int = 0
+
+  @deprecated("Use streamIdToInputInfo instead", "1.5.0")
+  def streamIdToNumRecords: Map[Int, Long] = streamIdToInputInfo.mapValues(_.numRecords)
 
   /**
    * Time taken for the first job of this batch to start processing from the time this batch
@@ -63,5 +70,21 @@ case class BatchInfo(
   /**
    * The number of recorders received by the receivers in this batch.
    */
-  def numRecords: Long = streamIdToNumRecords.values.sum
+  def numRecords: Long = streamIdToInputInfo.values.map(_.numRecords).sum
+
+  /** Set the failure reasons corresponding to every output ops in the batch */
+  private[streaming] def setFailureReason(reasons: Map[Int, String]): Unit = {
+    _failureReasons = reasons
+  }
+
+  /** Failure reasons corresponding to every output ops in the batch */
+  private[streaming] def failureReasons = _failureReasons
+
+  /** Set the number of output operations in this batch */
+  private[streaming] def setNumOutputOp(numOutputOp: Int): Unit = {
+    _numOutputOp = numOutputOp
+  }
+
+  /** Return the number of output operations in this batch */
+  private[streaming] def numOutputOp: Int = _numOutputOp
 }

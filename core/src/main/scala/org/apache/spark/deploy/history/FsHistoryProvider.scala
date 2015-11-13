@@ -17,16 +17,18 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{BufferedInputStream, FileNotFoundException, IOException, InputStream}
+import java.io.{BufferedInputStream, FileNotFoundException, InputStream, IOException, OutputStream}
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
 
+import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.AccessControlException
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
@@ -59,7 +61,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     .map { d => Utils.resolveURI(d).toString }
     .getOrElse(DEFAULT_LOG_DIR)
 
-  private val fs = Utils.getHadoopFileSystem(logDir, SparkHadoopUtil.get.newConfiguration(conf))
+  private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+  private val fs = Utils.getHadoopFileSystem(logDir, hadoopConf)
 
   // Used by check event thread and clean log thread.
   // Scheduled thread pool size must be one, otherwise it will have concurrent issues about fs
@@ -123,11 +126,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // Disable the background thread during tests.
     if (!conf.contains("spark.testing")) {
       // A task that periodically checks for event log updates on disk.
-      pool.scheduleAtFixedRate(getRunner(checkForLogs), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
+      pool.scheduleWithFixedDelay(getRunner(checkForLogs), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
 
       if (conf.getBoolean("spark.history.fs.cleaner.enabled", false)) {
         // A task that periodically cleans event logs on disk.
-        pool.scheduleAtFixedRate(getRunner(cleanLogs), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
+        pool.scheduleWithFixedDelay(getRunner(cleanLogs), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
       }
     }
   }
@@ -202,11 +205,25 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           mod1 >= mod2
       }
 
-      logInfos.sliding(20, 20).foreach { batch =>
-        replayExecutor.submit(new Runnable {
-          override def run(): Unit = mergeApplicationListing(batch)
-        })
-      }
+      logInfos.grouped(20)
+        .map { batch =>
+          replayExecutor.submit(new Runnable {
+            override def run(): Unit = mergeApplicationListing(batch)
+          })
+        }
+        .foreach { task =>
+          try {
+            // Wait for all tasks to finish. This makes sure that checkForLogs
+            // is not scheduled again while some tasks are already running in
+            // the replayExecutor.
+            task.get()
+          } catch {
+            case e: InterruptedException =>
+              throw e
+            case e: Exception =>
+              logError("Exception while merging application listings", e)
+          }
+        }
 
       lastModifiedTime = newLastModifiedTime
     } catch {
@@ -214,13 +231,65 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
+  override def writeEventLogs(
+      appId: String,
+      attemptId: Option[String],
+      zipStream: ZipOutputStream): Unit = {
+
+    /**
+     * This method compresses the files passed in, and writes the compressed data out into the
+     * [[OutputStream]] passed in. Each file is written as a new [[ZipEntry]] with its name being
+     * the name of the file being compressed.
+     */
+    def zipFileToStream(file: Path, entryName: String, outputStream: ZipOutputStream): Unit = {
+      val fs = FileSystem.get(hadoopConf)
+      val inputStream = fs.open(file, 1 * 1024 * 1024) // 1MB Buffer
+      try {
+        outputStream.putNextEntry(new ZipEntry(entryName))
+        ByteStreams.copy(inputStream, outputStream)
+        outputStream.closeEntry()
+      } finally {
+        inputStream.close()
+      }
+    }
+
+    applications.get(appId) match {
+      case Some(appInfo) =>
+        try {
+          // If no attempt is specified, or there is no attemptId for attempts, return all attempts
+          appInfo.attempts.filter { attempt =>
+            attempt.attemptId.isEmpty || attemptId.isEmpty || attempt.attemptId.get == attemptId.get
+          }.foreach { attempt =>
+            val logPath = new Path(logDir, attempt.logPath)
+            // If this is a legacy directory, then add the directory to the zipStream and add
+            // each file to that directory.
+            if (isLegacyLogDirectory(fs.getFileStatus(logPath))) {
+              val files = fs.listStatus(logPath)
+              zipStream.putNextEntry(new ZipEntry(attempt.logPath + "/"))
+              zipStream.closeEntry()
+              files.foreach { file =>
+                val path = file.getPath
+                zipFileToStream(path, attempt.logPath + Path.SEPARATOR + path.getName, zipStream)
+              }
+            } else {
+              zipFileToStream(new Path(logDir, attempt.logPath), attempt.logPath, zipStream)
+            }
+          }
+        } finally {
+          zipStream.close()
+        }
+      case None => throw new SparkException(s"Logs for $appId not found.")
+    }
+  }
+
+
   /**
    * Replay the log files in the list and merge the list of old applications with new ones
    */
   private def mergeApplicationListing(logs: Seq[FileStatus]): Unit = {
-    val bus = new ReplayListenerBus()
     val newAttempts = logs.flatMap { fileStatus =>
       try {
+        val bus = new ReplayListenerBus()
         val res = replay(fileStatus, bus)
         res match {
           case Some(r) => logDebug(s"Application log ${r.logPath} loaded successfully.")
@@ -353,8 +422,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Comparison function that defines the sort order for application attempts within the same
-   * application. Order is: running attempts before complete attempts, running attempts sorted
-   * by start time, completed attempts sorted by end time.
+   * application. Order is: attempts are sorted by descending start time.
+   * Most recent attempt state matches with current state of the app.
    *
    * Normally applications should have a single running attempt; but failure to call sc.stop()
    * may cause multiple running attempts to show up.
@@ -364,11 +433,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def compareAttemptInfo(
       a1: FsApplicationAttemptInfo,
       a2: FsApplicationAttemptInfo): Boolean = {
-    if (a1.completed == a2.completed) {
-      if (a1.completed) a1.endTime >= a2.endTime else a1.startTime >= a2.startTime
-    } else {
-      !a1.completed
-    }
+    a1.startTime >= a2.startTime
   }
 
   /**

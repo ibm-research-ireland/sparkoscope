@@ -91,7 +91,8 @@ object SizeEstimator extends Logging {
   // Sets object size, pointer size based on architecture and CompressedOops settings
   // from the JVM.
   private def initialize() {
-    is64bit = System.getProperty("os.arch").contains("64")
+    val arch = System.getProperty("os.arch")
+    is64bit = arch.contains("64") || arch.contains("s390x")
     isCompressedOops = getIsCompressedOops
 
     objectSize = if (!is64bit) 8 else {
@@ -113,14 +114,21 @@ object SizeEstimator extends Logging {
       return System.getProperty("spark.test.useCompressedOops").toBoolean
     }
 
+    // java.vm.info provides compressed ref info for IBM JDKs
+    if (System.getProperty("java.vendor").contains("IBM")) {
+      return System.getProperty("java.vm.info").contains("Compressed Ref")
+    }
+
     try {
       val hotSpotMBeanName = "com.sun.management:type=HotSpotDiagnostic"
       val server = ManagementFactory.getPlatformMBeanServer()
 
       // NOTE: This should throw an exception in non-Sun JVMs
+      // scalastyle:off classforname
       val hotSpotMBeanClass = Class.forName("com.sun.management.HotSpotDiagnosticMXBean")
       val getVMMethod = hotSpotMBeanClass.getDeclaredMethod("getVMOption",
           Class.forName("java.lang.String"))
+      // scalastyle:on classforname
 
       val bean = ManagementFactory.newPlatformMXBeanProxy(server,
         hotSpotMBeanName, hotSpotMBeanClass)
@@ -209,10 +217,10 @@ object SizeEstimator extends Logging {
     var arrSize: Long = alignSize(objectSize + INT_SIZE)
 
     if (elementClass.isPrimitive) {
-      arrSize += alignSize(length * primitiveSize(elementClass))
+      arrSize += alignSize(length.toLong * primitiveSize(elementClass))
       state.size += arrSize
     } else {
-      arrSize += alignSize(length * pointerSize)
+      arrSize += alignSize(length.toLong * pointerSize)
       state.size += arrSize
 
       if (length <= ARRAY_SIZE_FOR_SAMPLING) {
@@ -328,7 +336,7 @@ object SizeEstimator extends Logging {
     // hg.openjdk.java.net/jdk8/jdk8/hotspot/file/tip/src/share/vm/classfile/classFileParser.cpp
     var alignedSize = shellSize
     for (size <- fieldSizes if sizeCount(size) > 0) {
-      val count = sizeCount(size)
+      val count = sizeCount(size).toLong
       // If there are internal gaps, smaller field can fit in.
       alignedSize = math.max(alignedSize, alignSizeUp(shellSize, size) + size * count)
       shellSize += size * count

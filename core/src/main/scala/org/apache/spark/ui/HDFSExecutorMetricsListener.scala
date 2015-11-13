@@ -7,7 +7,7 @@ import org.apache.spark.scheduler.{HDFSExecutorMetrics, SparkListener}
 import scala.collection.mutable.ListBuffer
 
 /**
- * Created by johngouf on 11/08/15.
+ * Created by Yiannis Gkoufas on 11/08/15.
  */
 @DeveloperApi
 class HDFSExecutorMetricsListener() extends SparkListener with Logging {

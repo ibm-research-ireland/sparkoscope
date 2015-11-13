@@ -20,7 +20,7 @@ import org.apache.spark.util.Utils;
 import org.apache.hadoop.fs.FileSystem;
 
 /**
- * Created by johngouf on 17/09/15.
+ * Created by Yiannis Gkoufas on 17/09/15.
  */
 public class HDFSReporter extends ScheduledReporter {
 

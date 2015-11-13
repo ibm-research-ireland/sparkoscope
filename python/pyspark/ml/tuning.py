@@ -223,11 +223,17 @@ class CrossValidator(Estimator):
                 # TODO: duplicate evaluator to take extra params from input
                 metric = eva.evaluate(model.transform(validation, epm[j]))
                 metrics[j] += metric
-        bestIndex = np.argmax(metrics)
+
+        if eva.isLargerBetter():
+            bestIndex = np.argmax(metrics)
+        else:
+            bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
         return CrossValidatorModel(bestModel)
 
-    def copy(self, extra={}):
+    def copy(self, extra=None):
+        if extra is None:
+            extra = dict()
         newCV = Params.copy(self, extra)
         if self.isSet(self.estimator):
             newCV.setEstimator(self.getEstimator().copy(extra))
@@ -250,15 +256,18 @@ class CrossValidatorModel(Model):
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 
-    def copy(self, extra={}):
+    def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
         and some extra params. This copies the underlying bestModel,
         creates a deep copy of the embedded paramMap, and
         copies the embedded and extra parameters over.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
+        if extra is None:
+            extra = dict()
         return CrossValidatorModel(self.bestModel.copy(extra))
 
 

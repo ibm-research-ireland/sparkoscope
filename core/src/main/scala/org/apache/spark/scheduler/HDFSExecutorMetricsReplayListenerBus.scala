@@ -11,7 +11,7 @@ import scala.io.Source
 
 
 /**
- * Created by johngouf on 21/09/15.
+ * Created by Yiannis Gkoufas on 21/09/15.
  */
 class HDFSExecutorMetricsReplayListenerBus extends SparkListenerBus with Logging {
 

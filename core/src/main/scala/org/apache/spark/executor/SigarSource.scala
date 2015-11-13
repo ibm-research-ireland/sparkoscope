@@ -7,7 +7,7 @@ import org.apache.spark.metrics.source.Source
 import org.hyperic.sigar.Sigar
 
 /**
- * Created by johngouf on 06/08/15.
+ * Created by Yiannis Gkoufas on 06/08/15.
  */
 private[spark] class SigarSource() extends Source {
   override def sourceName: String = "sigar"

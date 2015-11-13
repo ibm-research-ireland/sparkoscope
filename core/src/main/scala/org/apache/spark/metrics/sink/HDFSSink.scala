@@ -1,7 +1,7 @@
 package org.apache.spark.metrics.sink
 
 /**
- * Created by johngouf on 17/09/15.
+ * Created by Yiannis Gkoufas on 17/09/15.
  */
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more

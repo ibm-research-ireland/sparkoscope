@@ -68,9 +68,9 @@ In YARN terminology, executors and application masters run inside "containers". 
 
     yarn logs -applicationId <app ID>
     
-will print out the contents of all log files from all containers from the given application. You can also view the container log files directly in HDFS using the HDFS shell or API. The directory where they are located can be found by looking at your YARN configs (`yarn.nodemanager.remote-app-log-dir` and `yarn.nodemanager.remote-app-log-dir-suffix`).
+will print out the contents of all log files from all containers from the given application. You can also view the container log files directly in HDFS using the HDFS shell or API. The directory where they are located can be found by looking at your YARN configs (`yarn.nodemanager.remote-app-log-dir` and `yarn.nodemanager.remote-app-log-dir-suffix`). The logs are also available on the Spark Web UI under the Executors Tab. You need to have both the Spark history server and the MapReduce history server running and configure `yarn.log.server.url` in `yarn-site.xml` properly. The log URL on the Spark history server UI will redirect you to the MapReduce history server to show the aggregated logs.
 
-When log aggregation isn't turned on, logs are retained locally on each machine under `YARN_APP_LOGS_DIR`, which is usually configured to `/tmp/logs` or `$HADOOP_HOME/logs/userlogs` depending on the Hadoop version and installation. Viewing logs for a container requires going to the host that contains them and looking in this directory.  Subdirectories organize log files by application ID and container ID.
+When log aggregation isn't turned on, logs are retained locally on each machine under `YARN_APP_LOGS_DIR`, which is usually configured to `/tmp/logs` or `$HADOOP_HOME/logs/userlogs` depending on the Hadoop version and installation. Viewing logs for a container requires going to the host that contains them and looking in this directory.  Subdirectories organize log files by application ID and container ID. The logs are also available on the Spark Web UI under the Executors Tab and doesn't require running the MapReduce history server.
 
 To review per-container launch environment, increase `yarn.nodemanager.delete.debug-delay-sec` to a
 large value (e.g. 36000), and then access the application cache through `yarn.nodemanager.local-dirs`
@@ -148,9 +148,22 @@ If you need a reference to the proper location to put log files in the YARN so t
 </tr>
 <tr>
   <td><code>spark.yarn.scheduler.heartbeat.interval-ms</code></td>
-  <td>5000</td>
+  <td>3000</td>
   <td>
     The interval in ms in which the Spark application master heartbeats into the YARN ResourceManager.
+    The value is capped at half the value of YARN's configuration for the expiry interval
+    (<code>yarn.am.liveness-monitor.expiry-interval-ms</code>).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.scheduler.initial-allocation.interval</code></td>
+  <td>200ms</td>
+  <td>
+    The initial interval in which the Spark application master eagerly heartbeats to the YARN ResourceManager
+    when there are pending container allocation requests. It should be no larger than
+    <code>spark.yarn.scheduler.heartbeat.interval-ms</code>. The allocation interval will doubled on
+    successive eager heartbeats if pending containers still exist, until
+    <code>spark.yarn.scheduler.heartbeat.interval-ms</code> is reached.
   </td>
 </tr>
 <tr>
@@ -186,7 +199,7 @@ If you need a reference to the proper location to put log files in the YARN so t
  <td><code>spark.executor.instances</code></td>
   <td>2</td>
   <td>
-    The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>.
+    The number of executors. Note that this property is incompatible with <code>spark.dynamicAllocation.enabled</code>. If both <code>spark.dynamicAllocation.enabled</code> and <code>spark.executor.instances</code> are specified, dynamic allocation is turned off and the specified number of <code>spark.executor.instances</code> is used. 
   </td>
 </tr>
 <tr>
@@ -198,14 +211,14 @@ If you need a reference to the proper location to put log files in the YARN so t
 </tr>
 <tr>
   <td><code>spark.yarn.driver.memoryOverhead</code></td>
-  <td>driverMemory * 0.07, with minimum of 384 </td>
+  <td>driverMemory * 0.10, with minimum of 384 </td>
   <td>
     The amount of off heap memory (in megabytes) to be allocated per driver in cluster mode. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.am.memoryOverhead</code></td>
-  <td>AM memory * 0.07, with minimum of 384 </td>
+  <td>AM memory * 0.10, with minimum of 384 </td>
   <td>
     Same as <code>spark.yarn.driver.memoryOverhead</code>, but for the Application Master in client mode.
   </td>
@@ -295,6 +308,57 @@ If you need a reference to the proper location to put log files in the YARN so t
   In YARN cluster mode, controls whether the client waits to exit until the application completes.
   If set to true, the client process will stay alive reporting the application's status.
   Otherwise, the client process will exit after submission.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.executor.nodeLabelExpression</code></td>
+  <td>(none)</td>
+  <td>
+  A YARN node label expression that restricts the set of nodes executors will be scheduled on.
+  Only versions of YARN greater than or equal to 2.6 support node label expressions, so when
+  running against earlier versions, this property will be ignored.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.keytab</code></td>
+  <td>(none)</td>
+  <td>
+  The full path to the file that contains the keytab for the principal specified above.
+  This keytab will be copied to the node running the Application Master via the Secure Distributed Cache,
+  for renewing the login tickets and the delegation tokens periodically.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.principal</code></td>
+  <td>(none)</td>
+  <td>
+  Principal to be used to login to KDC, while running on secure HDFS.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.config.gatewayPath</code></td>
+  <td>(none)</td>
+  <td>
+  A path that is valid on the gateway host (the host where a Spark application is started) but may
+  differ for paths for the same resource in other nodes in the cluster. Coupled with
+  <code>spark.yarn.config.replacementPath</code>, this is used to support clusters with
+  heterogeneous configurations, so that Spark can correctly launch remote processes.
+  <p/>
+  The replacement path normally will contain a reference to some environment variable exported by
+  YARN (and, thus, visible to Spark containers).
+  <p/>
+  For example, if the gateway node has Hadoop libraries installed on <code>/disk1/hadoop</code>, and
+  the location of the Hadoop install is exported by YARN as the  <code>HADOOP_HOME</code>
+  environment variable, setting this value to <code>/disk1/hadoop</code> and the replacement path to
+  <code>$HADOOP_HOME</code> will make sure that paths used to launch remote processes properly
+  reference the local YARN configuration.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.config.replacementPath</code></td>
+  <td>(none)</td>
+  <td>
+  See <code>spark.yarn.config.gatewayPath</code>.
   </td>
 </tr>
 </table>

@@ -24,6 +24,7 @@ import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JM
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.language.existentials
+import scala.util.control.NonFatal
 
 import com.google.common.base.Charsets.UTF_8
 import org.apache.hadoop.conf.Configuration
@@ -36,9 +37,8 @@ import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
-import scala.util.control.NonFatal
 
 private[spark] class PythonRDD(
     @transient parent: RDD[_],
@@ -61,11 +61,39 @@ private[spark] class PythonRDD(
     if (preservePartitoning) firstParent.partitioner else None
   }
 
+  val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
+
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
+    val runner = new PythonRunner(
+      command, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator,
+      bufferSize, reuse_worker)
+    runner.compute(firstParent.iterator(split, context), split.index, context)
+  }
+}
+
+
+/**
+ * A helper class to run Python UDFs in Spark.
+ */
+private[spark] class PythonRunner(
+    command: Array[Byte],
+    envVars: JMap[String, String],
+    pythonIncludes: JList[String],
+    pythonExec: String,
+    pythonVer: String,
+    broadcastVars: JList[Broadcast[PythonBroadcast]],
+    accumulator: Accumulator[JList[Array[Byte]]],
+    bufferSize: Int,
+    reuse_worker: Boolean)
+  extends Logging {
+
+  def compute(
+      inputIterator: Iterator[_],
+      partitionIndex: Int,
+      context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
-    val localdir = env.blockManager.diskBlockManager.localDirs.map(
-      f => f.getPath()).mkString(",")
+    val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     envVars += ("SPARK_LOCAL_DIRS" -> localdir) // it's also used in monitor thread
     if (reuse_worker) {
       envVars += ("SPARK_REUSE_WORKER" -> "1")
@@ -75,7 +103,7 @@ private[spark] class PythonRDD(
     @volatile var released = false
 
     // Start a thread to feed the process input from our parent's iterator
-    val writerThread = new WriterThread(env, worker, split, context)
+    val writerThread = new WriterThread(env, worker, inputIterator, partitionIndex, context)
 
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
@@ -183,13 +211,16 @@ private[spark] class PythonRDD(
     new InterruptibleIterator(context, stdoutIterator)
   }
 
-  val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
-
   /**
    * The thread responsible for writing the data from the PythonRDD's parent iterator to the
    * Python process.
    */
-  class WriterThread(env: SparkEnv, worker: Socket, split: Partition, context: TaskContext)
+  class WriterThread(
+      env: SparkEnv,
+      worker: Socket,
+      inputIterator: Iterator[_],
+      partitionIndex: Int,
+      context: TaskContext)
     extends Thread(s"stdout writer for $pythonExec") {
 
     @volatile private var _exception: Exception = null
@@ -207,14 +238,15 @@ private[spark] class PythonRDD(
 
     override def run(): Unit = Utils.logUncaughtExceptions {
       try {
+        TaskContext.setTaskContext(context)
         val stream = new BufferedOutputStream(worker.getOutputStream, bufferSize)
         val dataOut = new DataOutputStream(stream)
         // Partition index
-        dataOut.writeInt(split.index)
+        dataOut.writeInt(partitionIndex)
         // Python version of driver
         PythonRDD.writeUTF(pythonVer, dataOut)
         // sparkFilesDir
-        PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
+        PythonRDD.writeUTF(SparkFiles.getRootDirectory(), dataOut)
         // Python includes (*.zip and *.egg files)
         dataOut.writeInt(pythonIncludes.length)
         for (include <- pythonIncludes) {
@@ -245,7 +277,7 @@ private[spark] class PythonRDD(
         dataOut.writeInt(command.length)
         dataOut.write(command)
         // Data values
-        PythonRDD.writeIteratorToStream(firstParent.iterator(split, context), dataOut)
+        PythonRDD.writeIteratorToStream(inputIterator, dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
         dataOut.writeInt(SpecialLengths.END_OF_STREAM)
         dataOut.flush()
@@ -263,11 +295,6 @@ private[spark] class PythonRDD(
           if (!worker.isClosed) {
             Utils.tryLog(worker.shutdownOutput())
           }
-      } finally {
-        // Release memory used by this thread for shuffles
-        env.shuffleMemoryManager.releaseMemoryForThisThread()
-        // Release memory used by this thread for unrolling blocks
-        env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
       }
     }
   }
@@ -331,7 +358,8 @@ private[spark] object PythonRDD extends Logging {
 
   // remember the broadcasts sent to each worker
   private val workerBroadcasts = new mutable.WeakHashMap[Socket, mutable.Set[Long]]()
-  private def getWorkerBroadcasts(worker: Socket) = {
+
+  def getWorkerBroadcasts(worker: Socket): mutable.Set[Long] = {
     synchronized {
       workerBroadcasts.getOrElseUpdate(worker, new mutable.HashSet[Long]())
     }
@@ -358,12 +386,11 @@ private[spark] object PythonRDD extends Logging {
   def runJob(
       sc: SparkContext,
       rdd: JavaRDD[Array[Byte]],
-      partitions: JArrayList[Int],
-      allowLocal: Boolean): Int = {
+      partitions: JArrayList[Int]): Int = {
     type ByteArray = Array[Byte]
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
-      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions, allowLocal)
+      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions)
     val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
     serveIterator(flattenedPartition.iterator,
       s"serve RDD ${rdd.id} with partitions ${partitions.mkString(",")}")
@@ -425,11 +452,6 @@ private[spark] object PythonRDD extends Logging {
     iter.foreach(write)
   }
 
-  /** Create an RDD that has no partitions or elements. */
-  def emptyRDD[T](sc: JavaSparkContext): JavaRDD[T] = {
-    sc.emptyRDD[T]
-  }
-
   /**
    * Create an RDD from a path using [[org.apache.hadoop.mapred.SequenceFileInputFormat]],
    * key and value class.
@@ -450,7 +472,7 @@ private[spark] object PythonRDD extends Logging {
     val kc = Utils.classForName(keyClass).asInstanceOf[Class[K]]
     val vc = Utils.classForName(valueClass).asInstanceOf[Class[V]]
     val rdd = sc.sc.sequenceFile[K, V](path, kc, vc, minSplits)
-    val confBroadcasted = sc.sc.broadcast(new SerializableWritable(sc.hadoopConfiguration()))
+    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(sc.hadoopConfiguration()))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
@@ -476,7 +498,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
-    val confBroadcasted = sc.sc.broadcast(new SerializableWritable(mergedConf))
+    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(mergedConf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
@@ -502,7 +524,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       newAPIHadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClass, keyClass, valueClass, conf)
-    val confBroadcasted = sc.sc.broadcast(new SerializableWritable(conf))
+    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(conf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
@@ -545,7 +567,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         Some(path), inputFormatClass, keyClass, valueClass, mergedConf)
-    val confBroadcasted = sc.sc.broadcast(new SerializableWritable(mergedConf))
+    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(mergedConf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
@@ -571,7 +593,7 @@ private[spark] object PythonRDD extends Logging {
     val rdd =
       hadoopRDDFromClassNames[K, V, F](sc,
         None, inputFormatClass, keyClass, valueClass, conf)
-    val confBroadcasted = sc.sc.broadcast(new SerializableWritable(conf))
+    val confBroadcasted = sc.sc.broadcast(new SerializableConfiguration(conf))
     val converted = convertRDD(rdd, keyConverterClass, valueConverterClass,
       new WritableToJavaConverter(confBroadcasted))
     JavaRDD.fromRDD(SerDeUtil.pairRDDToPython(converted, batchSize))
@@ -611,7 +633,7 @@ private[spark] object PythonRDD extends Logging {
    *
    * The thread will terminate after all the data are sent or any exceptions happen.
    */
-  private def serveIterator[T](items: Iterator[T], threadName: String): Int = {
+  def serveIterator[T](items: Iterator[T], threadName: String): Int = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 3 seconds
     serverSocket.setSoTimeout(3000)
@@ -804,7 +826,7 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
 
   /**
    * We try to reuse a single Socket to transfer accumulator updates, as they are all added
-   * by the DAGScheduler's single-threaded actor anyway.
+   * by the DAGScheduler's single-threaded RpcEndpoint anyway.
    */
   @transient var socket: Socket = _
 

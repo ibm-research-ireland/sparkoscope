@@ -24,11 +24,12 @@ import org.apache.spark.annotation.DeveloperApi
  * Information about an [[org.apache.spark.Accumulable]] modified during a task or stage.
  */
 @DeveloperApi
-class AccumulableInfo (
+class AccumulableInfo private[spark] (
     val id: Long,
     val name: String,
     val update: Option[String], // represents a partial update within a task
-    val value: String) {
+    val value: String,
+    val internal: Boolean) {
 
   override def equals(other: Any): Boolean = other match {
     case acc: AccumulableInfo =>
@@ -39,11 +40,20 @@ class AccumulableInfo (
 }
 
 object AccumulableInfo {
+  def apply(
+      id: Long,
+      name: String,
+      update: Option[String],
+      value: String,
+      internal: Boolean): AccumulableInfo = {
+    new AccumulableInfo(id, name, update, value, internal)
+  }
+
   def apply(id: Long, name: String, update: Option[String], value: String): AccumulableInfo = {
-    new AccumulableInfo(id, name, update, value)
+    new AccumulableInfo(id, name, update, value, internal = false)
   }
 
   def apply(id: Long, name: String, value: String): AccumulableInfo = {
-    new AccumulableInfo(id, name, None, value)
+    new AccumulableInfo(id, name, None, value, internal = false)
   }
 }

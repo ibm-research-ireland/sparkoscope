@@ -114,5 +114,10 @@ public class SparkFirehoseListener implements SparkListener {
     }
 
     @Override
+    public void onBlockUpdated(SparkListenerBlockUpdated blockUpdated) {
+        onEvent(blockUpdated);
+    }
+
+    @Override
     public final void onHDFSExecutorMetrics(HDFSExecutorMetrics hdfsExecutorMetrics){ onEvent(hdfsExecutorMetrics);}
 }

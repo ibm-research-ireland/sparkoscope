@@ -80,5 +80,9 @@ public class JavaSparkListener implements SparkListener {
   public void onExecutorRemoved(SparkListenerExecutorRemoved executorRemoved) { }
 
   @Override
+  public void onBlockUpdated(SparkListenerBlockUpdated blockUpdated) { }
+
+  @Override
   public void onHDFSExecutorMetrics(HDFSExecutorMetrics hdfsExecutorMetrics) { }
+
 }
