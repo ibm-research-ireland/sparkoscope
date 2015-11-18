@@ -153,18 +153,24 @@ private[spark] class SigarSource() extends Source {
   def getDiskMetrics(): DiskMetrics = {
     var bytesWritten = 0L
     var bytesRead = 0L
-    sigar.getFileSystemList.foreach(fileSystem => {
-      val diskUsage = sigar.getFileSystemUsage(fileSystem.getDirName)
-      val systemBytesWritten = diskUsage.getDiskWriteBytes
-      val systemBytesRead = diskUsage.getDiskReadBytes
-      if (systemBytesWritten > 0) {
-        bytesWritten += systemBytesWritten
+    try {
+      sigar.getFileSystemList.foreach(fileSystem => {
+        val diskUsage = sigar.getFileSystemUsage(fileSystem.getDirName)
+        val systemBytesWritten = diskUsage.getDiskWriteBytes
+        val systemBytesRead = diskUsage.getDiskReadBytes
+        if (systemBytesWritten > 0) {
+          bytesWritten += systemBytesWritten
+        }
+        if (systemBytesRead > 0) {
+          bytesRead += systemBytesRead
+        }
+      })
+      DiskMetrics(bytesWritten, bytesRead)
+    } catch {
+      case e: Exception => {
+        e.printStackTrace();
+        DiskMetrics(0L,0L);
       }
-      if (systemBytesRead > 0) {
-        bytesRead += systemBytesRead
-      }
-    })
-    DiskMetrics(bytesWritten, bytesRead)
+    }
   }
-
 }
