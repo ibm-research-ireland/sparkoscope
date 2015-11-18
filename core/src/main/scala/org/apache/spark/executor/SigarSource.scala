@@ -7,8 +7,8 @@ import org.apache.spark.metrics.source.Source
 import org.hyperic.sigar.Sigar
 
 /**
- * Created by Yiannis Gkoufas on 06/08/15.
- */
+  * Created by Yiannis Gkoufas on 06/08/15.
+  */
 private[spark] class SigarSource() extends Source {
   override def sourceName: String = "sigar"
 
@@ -153,8 +153,9 @@ private[spark] class SigarSource() extends Source {
   def getDiskMetrics(): DiskMetrics = {
     var bytesWritten = 0L
     var bytesRead = 0L
-    try {
-      sigar.getFileSystemList.foreach(fileSystem => {
+
+    sigar.getFileSystemList.foreach(fileSystem => {
+      try {
         val diskUsage = sigar.getFileSystemUsage(fileSystem.getDirName)
         val systemBytesWritten = diskUsage.getDiskWriteBytes
         val systemBytesRead = diskUsage.getDiskReadBytes
@@ -164,13 +165,12 @@ private[spark] class SigarSource() extends Source {
         if (systemBytesRead > 0) {
           bytesRead += systemBytesRead
         }
-      })
-      DiskMetrics(bytesWritten, bytesRead)
-    } catch {
-      case e: Exception => {
-        e.printStackTrace();
-        DiskMetrics(0L,0L);
+      } catch {
+        case e: Exception => {
+          e.printStackTrace()
+        }
       }
-    }
+    })
+    DiskMetrics(bytesWritten, bytesRead)
   }
 }
