@@ -39,8 +39,6 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     })
   }
 
-  val lowMetrics = new LowLevelMetrics
-
   override val metricRegistry = new MetricRegistry()
 
   override val sourceName = "executor"
@@ -64,15 +62,6 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
   // been in th pool
   metricRegistry.register(MetricRegistry.name("threadpool", "maxPool_size"), new Gauge[Int] {
     override def getValue: Int = threadPool.getMaximumPoolSize()
-  })
-
-  // Register low level netty metrics from the LowLevelMetrics accumulator
-  metricRegistry.register(MetricRegistry.name("netty", "avgBlocksPerRequest"), new Gauge[Double] {
-    override def getValue: Double = {
-      val ret = lowMetrics.getAvgBlocksPerRequest()
-      lowMetrics.reset()
-      ret
-    }
   })
 
   // Gauge for file system stats of this executor

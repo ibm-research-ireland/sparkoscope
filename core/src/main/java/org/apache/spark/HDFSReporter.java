@@ -266,8 +266,6 @@ public class HDFSReporter extends ScheduledReporter {
 
                 rows++;
 
-                System.out.println("ROWS REPORTED ON APPEND= "+rows);
-
                 HashMap finalMapToWrite = new HashMap();
                 finalMapToWrite.put("timestamp",previousTimestamp);
                 finalMapToWrite.put("values", bufferEntries);
@@ -310,8 +308,9 @@ public class HDFSReporter extends ScheduledReporter {
             }
             hadoopDataStream = fileSystem.append(finalPath);
             writer = new BufferedWriter(new OutputStreamWriter(hadoopDataStream));
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            LOGGER.error("Exception when trying to create writer", e);
             return false;
         }
         return true;
@@ -331,8 +330,9 @@ public class HDFSReporter extends ScheduledReporter {
 
         try {
             fileSystem = Utils.getHadoopFileSystem(new URI(directory), configuration);
-        } catch (URISyntaxException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            LOGGER.error("Exception when trying set hadoop conf", e);
             return false;
         }
         return true;
@@ -355,8 +355,6 @@ public class HDFSReporter extends ScheduledReporter {
                 originalMap.put(entry, existing);
                 putLeaf(entries, index + 1, existing, value);
             }
-        } else {
-            System.out.println("UNKNOWN ENTRY= "+entry+","+originalMap+","+originalObj+","+originalMap.get(entry)+","+value);
         }
     }
 
@@ -365,7 +363,6 @@ public class HDFSReporter extends ScheduledReporter {
         try {
             if(writer!=null) {
                 rows++;
-
                 HashMap finalMapToWrite = new HashMap();
                 finalMapToWrite.put("timestamp",previousTimestamp);
                 finalMapToWrite.put("values", bufferEntries);
@@ -377,11 +374,10 @@ public class HDFSReporter extends ScheduledReporter {
                 hadoopDataStream.flush();
                 hadoopDataStream.hsync();
                 writer.close();
-
-                System.out.println("ROWS REPORTED ON CLOSE= "+rows);
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            LOGGER.error("Exception when flush writes to HDFS", e);
         }
     }
 

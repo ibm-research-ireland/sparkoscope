@@ -21,7 +21,6 @@ import java.io.File
 import java.net.Socket
 
 import akka.actor.ActorSystem
-import org.apache.spark.executor.LowLevelMetrics
 
 import scala.collection.mutable
 import scala.util.Properties
@@ -333,9 +332,7 @@ object SparkEnv extends Logging {
     val blockTransferService =
       conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
         case "netty" =>
-           val nettyBlockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
-           nettyBlockTransferService.lowLevelMetrics = new LowLevelMetrics
-           nettyBlockTransferService
+           new NettyBlockTransferService(conf, securityManager, numUsableCores)
         case "nio" =>
           logWarning("NIO-based block transfer service is deprecated, " +
             "and will be removed in Spark 1.6.0.")

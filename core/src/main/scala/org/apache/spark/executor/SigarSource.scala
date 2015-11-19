@@ -5,12 +5,15 @@ import java.util.Date
 import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.apache.spark.metrics.source.Source
 import org.hyperic.sigar.Sigar
+import org.slf4j.LoggerFactory
 
 /**
   * Created by Yiannis Gkoufas on 06/08/15.
   */
 private[spark] class SigarSource() extends Source {
   override def sourceName: String = "sigar"
+
+  var LOGGER = LoggerFactory.getLogger(classOf[SigarSource]);
 
   override val metricRegistry: MetricRegistry = new MetricRegistry()
 
@@ -128,13 +131,29 @@ private[spark] class SigarSource() extends Source {
 
   metricRegistry.register(MetricRegistry.name("sigar.cpu"),new Gauge[Double] {
     override def getValue: Double = {
+      try{
       sigar.getCpuPerc.getCombined*100.0
+      }catch {
+        case e: Exception => {
+          e.printStackTrace()
+          LOGGER.error("Sigar couldn't get cpu utilization ",e)
+          0.0
+        }
+      }
     }
   })
 
   metricRegistry.register(MetricRegistry.name("sigar.ram"),new Gauge[Double] {
     override def getValue: Double = {
+      try{
       sigar.getMem.getUsedPercent
+      }catch {
+        case e: Exception => {
+          e.printStackTrace()
+          LOGGER.error("Sigar couldn't get memory utilization ",e)
+          0.0
+        }
+      }
     }
   });
 
@@ -143,9 +162,17 @@ private[spark] class SigarSource() extends Source {
     var bytesTransmitted = 0L
 
     sigar.getNetInterfaceList.foreach(interface => {
-      val netInterfaceStat = sigar.getNetInterfaceStat(interface)
-      bytesReceived += netInterfaceStat.getRxBytes
-      bytesTransmitted += netInterfaceStat.getTxBytes
+      try
+      {
+        val netInterfaceStat = sigar.getNetInterfaceStat(interface)
+        bytesReceived += netInterfaceStat.getRxBytes
+        bytesTransmitted += netInterfaceStat.getTxBytes
+      }catch {
+        case e: Exception => {
+          e.printStackTrace()
+          LOGGER.error("Sigar couldn't get network metrics for interface {} ",interface,e)
+        }
+      }
     })
     NetworkMetrics(bytesReceived, bytesTransmitted)
   }
@@ -168,6 +195,7 @@ private[spark] class SigarSource() extends Source {
       } catch {
         case e: Exception => {
           e.printStackTrace()
+          LOGGER.error("Sigar couldn't get filesystem usage for filesystem {} ",fileSystem,e)
         }
       }
     })
