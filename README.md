@@ -111,42 +111,30 @@ In spark-env.sh you need to set the HADOOP_CONF_DIR variable to the configuratio
 HADOOP_CONF_DIR=/path/to/hadoop/etc/hadoop
 ```
 
-Sigar metrics can be used as a source in the metrics.properties file:
-
-```
-sigar.sink.csv.class=org.apache.spark.metrics.sink.CsvSink
-```
-
-```
-sigar.sink.csv.period=20
-```
-
 The above configuration will output the Sigar metrics in csv files. Check the metrics.properties documentation for additional parameters of CsvSink.
 
 In order for the metrics to be stored in HDFS and therefore by retrieved by the UI, you need to have the following in the metrics.properties file:
 
 ```
-sigar.sink.hdfs.class=org.apache.spark.metrics.sink.SigarSink
+*.sink.hdfs.class=org.apache.spark.metrics.sink.HDFSSink
 ```
 
 ```
-sigar.sink.hdfs.pollPeriod = 20
+*.sink.hdfs.pollPeriod = 20
 ```
 
 ```
-sigar.sink.hdfs.dir = hdfs://localhost:9000/custom-metrics
+*.sink.hdfs.dir = hdfs://localhost:9000/custom-metrics
 ```
 
 ```
-sigar.sink.hdfs.unit = seconds
+*.sink.hdfs.unit = seconds
 ```
 
-CsvSink is not required for the UI to display the metrics.
-
-In spark-defaults.conf you need to add to java.library.path parameter of the executor the directory of the native libraries of sigar. For instance:
+In spark-envh.sh you need to add to LD_LIBRARY_PATH variable the directory of the native libraries of sigar. For instance:
 
 ```
-spark.executor.extraJavaOptions -Djava.library.path=/path/to/hyperic-sigar-1.6.4/sigar-bin/lib/
+LD_LIBRARY_PATH=/path/to/hyperic-sigar-1.6.4/sigar-bin/lib/:$LD_LIBRARY_PATH
 ```
 
 Event logging must be enabled in spark-defaults.conf:

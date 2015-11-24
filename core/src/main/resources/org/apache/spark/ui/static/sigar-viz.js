@@ -8,10 +8,12 @@ var executorMetrics = [];
 var availableTags = {};
 var availableKeys = [];
 var stageInfo = [];
+var jobInfo = [];
 
-function parseExecutorMetrics(_executorMetrics,_stageInfo) {
+function parseExecutorMetrics(_executorMetrics,_stageInfo,_jobInfo) {
     executorMetrics = _executorMetrics;
     stageInfo = _stageInfo;
+    jobInfo = _jobInfo;
     var firstEntryObj = JSON.parse(executorMetrics[0].values);
     discoverTags(firstEntryObj, "");
     availableKeys = (Object.keys(availableTags));

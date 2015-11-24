@@ -297,6 +297,7 @@ public class HDFSReporter extends ScheduledReporter {
     }
 
     private boolean createWriter(String appId,String executorId) {
+        System.out.println("Creating writer for "+appId+" and "+executorId);
         Path appFolder = new Path(directory + File.separator + appId);
         try {
             if (!fileSystem.exists(appFolder)) {

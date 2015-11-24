@@ -136,7 +136,7 @@ private[spark] class SigarSource() extends Source {
       }catch {
         case e: Exception => {
           e.printStackTrace()
-          LOGGER.error("Sigar couldn't get cpu utilization ",e)
+          LOGGER.error("Sigar couldn't get cpu utilization, error: "+e.getMessage)
           0.0
         }
       }
@@ -149,8 +149,7 @@ private[spark] class SigarSource() extends Source {
       sigar.getMem.getUsedPercent
       }catch {
         case e: Exception => {
-          e.printStackTrace()
-          LOGGER.error("Sigar couldn't get memory utilization ",e)
+          LOGGER.error("Sigar couldn't get memory utilization, error: "+e.getMessage)
           0.0
         }
       }
@@ -169,8 +168,7 @@ private[spark] class SigarSource() extends Source {
         bytesTransmitted += netInterfaceStat.getTxBytes
       }catch {
         case e: Exception => {
-          e.printStackTrace()
-          LOGGER.error("Sigar couldn't get network metrics for interface {} ",interface,e)
+          LOGGER.error("Sigar couldn't get network metrics for interface "+interface+", error: "+e.getMessage)
         }
       }
     })
@@ -194,8 +192,7 @@ private[spark] class SigarSource() extends Source {
         }
       } catch {
         case e: Exception => {
-          e.printStackTrace()
-          LOGGER.error("Sigar couldn't get filesystem usage for filesystem {} ",fileSystem,e)
+          LOGGER.error("Sigar couldn't get filesystem usage for filesystem "+fileSystem.getDevName+" mounted at "+fileSystem.getDirName+", error: "+e.getMessage)
         }
       }
     })
