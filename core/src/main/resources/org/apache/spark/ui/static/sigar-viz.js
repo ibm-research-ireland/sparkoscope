@@ -9,11 +9,13 @@ var availableTags = {};
 var availableKeys = [];
 var stageInfo = [];
 var jobInfo = [];
+var tooltips = {};
 
-function parseExecutorMetrics(_executorMetrics,_stageInfo,_jobInfo) {
+function parseExecutorMetrics(_executorMetrics,_stageInfo,_jobInfo,_tooltips) {
     executorMetrics = _executorMetrics;
     stageInfo = _stageInfo;
     jobInfo = _jobInfo;
+    tooltips = _tooltips;
     var firstEntryObj = JSON.parse(executorMetrics[0].values);
     discoverTags(firstEntryObj, "");
     availableKeys = (Object.keys(availableTags));
@@ -158,7 +160,6 @@ function createChartForTag(inputKey) {
         min_y: -1,
         y_extended_ticks: true,
         height: 300,
-        description: 'Setting missing_is_hidden works with multiple lines too.',
         colors: colors,
         markers: markers,
         mouseover: function(d, i) {
@@ -184,6 +185,8 @@ function createChartForTag(inputKey) {
         },
         target: '#executor-metrics'
     };
+
+    if(inputKey in tooltips) graph.description = tooltips[inputKey];
 
     $(graph.target).empty();
 

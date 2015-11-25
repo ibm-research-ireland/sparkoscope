@@ -385,7 +385,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         </div>
 
         content ++= <script type="text/javascript">
-          {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr},${stageInfoAsStr},${jobInfoAsStr});")}
+          {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr},${stageInfoAsStr},${jobInfoAsStr},${UIUtils.metricsTooltipsJson});")}
         </script>
       }
       content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
