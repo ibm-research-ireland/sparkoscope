@@ -111,27 +111,25 @@ In spark-env.sh you need to set the HADOOP_CONF_DIR variable to the configuratio
 HADOOP_CONF_DIR=/path/to/hadoop/etc/hadoop
 ```
 
-The above configuration will output the Sigar metrics in csv files. Check the metrics.properties documentation for additional parameters of CsvSink.
-
-In order for the metrics to be stored in HDFS and therefore by retrieved by the UI, you need to have the following in the metrics.properties file:
+In order for the executor metrics to be stored in HDFS and therefore be retrieved by the UI, you need to have the following in the metrics.properties file:
 
 ```
-*.sink.hdfs.class=org.apache.spark.metrics.sink.HDFSSink
+executor.sink.hdfs.class=org.apache.spark.metrics.sink.HDFSSink
 ```
 
 ```
-*.sink.hdfs.pollPeriod = 20
+executor.sink.hdfs.pollPeriod = 20
 ```
 
 ```
-*.sink.hdfs.dir = hdfs://localhost:9000/custom-metrics
+executor.sink.hdfs.dir = hdfs://localhost:9000/custom-metrics
 ```
 
 ```
-*.sink.hdfs.unit = seconds
+executor.sink.hdfs.unit = seconds
 ```
 
-In spark-envh.sh you need to add to LD_LIBRARY_PATH variable the directory of the native libraries of sigar. For instance:
+In spark-envh.sh you need to add to LD_LIBRARY_PATH variable the directory of the native libraries of Sigar. For instance:
 
 ```
 LD_LIBRARY_PATH=/path/to/hyperic-sigar-1.6.4/sigar-bin/lib/:$LD_LIBRARY_PATH
@@ -152,8 +150,16 @@ Also in spark-defaults.conf you should specify the folder from which the UI will
 spark.sigar.dir                  hdfs://127.0.0.1:9000/custom-metrics
 ```
 
+## Notes about the metrics
+
+The metrics are visualized when the user accesses the history tab of a successfully completed app ( http://ip-of-spark-master:port/history/app-201511XXXXXX-XXX ).
+The user can plot all the metrics provided per executor but also metrics of the operating system of the host (physical or virtual) like RAM/CPU utilization, 
+network traffic and disk usage.
+
 # **Important**: 
 
 The folders spark.eventLog.dir, sigar.sink.hdfs.dir and spark.sigar.dir must already exist in the HDFS.
 
-You should increase the limit for open files on the operating systems of the Master and the Workers
+You should increase the limit for open files on the operating systems of the Master and the Workers.
+
+Be sure to build spark according to the version of hadoop you are using.
