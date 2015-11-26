@@ -14,6 +14,7 @@ var tooltips = {};
 function parseExecutorMetrics(_executorMetrics,_stageInfo,_jobInfo,_tooltips) {
     executorMetrics = _executorMetrics;
     stageInfo = _stageInfo;
+    stageInfo.reverse();
     jobInfo = _jobInfo;
     tooltips = _tooltips;
     var firstEntryObj = JSON.parse(executorMetrics[0].values);

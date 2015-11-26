@@ -470,7 +470,7 @@ private[spark] object UIUtils extends Logging {
       ("sigar.kBytesWrittenPerSecond" -> "Number of Kilobytes written to disk per second") ~
       ("sigar.ram" -> "Percentage of RAM utilization") ~
       ("sigar.cpu" -> "Percentage of CPU utilization") ~
-      ("sigar.kBytesRxPerSecond" -> "Percentage of CPU utilization") ~
-      ("sigar.kBytesTxPerSecond" -> "Percentage of CPU utilization")))
+      ("sigar.kBytesRxPerSecond" -> "Number of Kilobytes received from the network per second") ~
+      ("sigar.kBytesTxPerSecond" -> "Number of Kilobytes transmitted to the network per second")))
   }
 }
