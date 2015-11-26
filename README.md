@@ -152,9 +152,26 @@ spark.sigar.dir                  hdfs://127.0.0.1:9000/custom-metrics
 
 ## Notes about the metrics
 
-The metrics are visualized when the user accesses the history tab of a successfully completed app ( http://ip-of-spark-master:port/history/app-201511XXXXXX-XXX ).
-The user can plot all the metrics provided per executor but also metrics of the operating system of the host (physical or virtual) like RAM/CPU utilization, 
-network traffic and disk usage.
+The metrics are grouped per application and the user can access the plots by selecting the **Name** entry under the **Completed Applications** table.
+The URL on the browser should look similar to http://ip-of-spark-master:port/history/app-201511XXXXXX-XXX
+Under the dropdown menu **Executor Metrics** the user can plot any of the metrics provided per executor but also metrics of the operating system of the host (physical or virtual):
+
+### sigar.ram
+
+Percentage of RAM utilization
+
+### sigar.cpu
+
+Percentage of CPU utilization
+
+### sigar.kBytesRxPerSecond / sigar.kBytesTxPerSecond
+
+Number of Kilobytes received/transmitted from/to the network per second
+
+### sigar.kBytesReadPerSecond / sigar.kBytesWrittenPerSecond
+
+Number of Kilobytes read/written from/to the disk per second
+
 
 # **Important**: 
 

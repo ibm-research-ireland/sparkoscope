@@ -466,8 +466,8 @@ private[spark] object UIUtils extends Logging {
 
   def metricsTooltipsJson : String = {
     compact(JsonMethods.render(
-      ("sigar.kBytesReadPerSecond" -> "Number of Kilobytes written to disk per second") ~
-      ("sigar.kBytesWrittenPerSecond" -> "Number of Kilobytes written to disk per second") ~
+      ("sigar.kBytesReadPerSecond" -> "Number of Kilobytes read from the disk per second") ~
+      ("sigar.kBytesWrittenPerSecond" -> "Number of Kilobytes written to the disk per second") ~
       ("sigar.ram" -> "Percentage of RAM utilization") ~
       ("sigar.cpu" -> "Percentage of CPU utilization") ~
       ("sigar.kBytesRxPerSecond" -> "Number of Kilobytes received from the network per second") ~
