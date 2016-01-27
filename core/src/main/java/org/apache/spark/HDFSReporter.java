@@ -5,6 +5,7 @@ import com.codahale.metrics.Timer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
+import org.apache.spark.deploy.SparkHadoopUtil;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +26,6 @@ import org.apache.hadoop.fs.FileSystem;
 public class HDFSReporter extends ScheduledReporter {
 
     private String executorId;
-    private int rows = 0;
 
     public static Builder forRegistry(MetricRegistry registry) {
         return new Builder(registry);
@@ -264,8 +264,6 @@ public class HDFSReporter extends ScheduledReporter {
                 putLeaf(entries,0,bufferEntries,values[0]);
             } else {
 
-                rows++;
-
                 HashMap finalMapToWrite = new HashMap();
                 finalMapToWrite.put("timestamp",previousTimestamp);
                 finalMapToWrite.put("values", bufferEntries);
@@ -273,13 +271,9 @@ public class HDFSReporter extends ScheduledReporter {
                 String entryString = new JSONObject(finalMapToWrite).toString();
                 writer.write(entryString);
                 writer.newLine();
-
-                if(rows%20==0)
-                {
-                    writer.flush();
-                    hadoopDataStream.flush();
-                    hadoopDataStream.hsync();
-                }
+                writer.flush();
+                hadoopDataStream.flush();
+                hadoopDataStream.hsync();
 
                 bufferEntries.clear();
 
@@ -318,17 +312,7 @@ public class HDFSReporter extends ScheduledReporter {
     }
 
     private boolean setHadoopConf() {
-        configuration = new Configuration();
-        if(System.getenv().containsKey("HADOOP_CONF_DIR"))
-        {
-            String confDir = System.getenv().get("HADOOP_CONF_DIR");
-            File file = new File(confDir);
-            if(file.exists()&&file.isDirectory())
-            {
-                configuration.addResource(confDir);
-            }
-        }
-
+        configuration = SparkHadoopUtil.get().newConfiguration();
         try {
             fileSystem = Utils.getHadoopFileSystem(new URI(directory), configuration);
         } catch (Exception e) {
@@ -363,7 +347,6 @@ public class HDFSReporter extends ScheduledReporter {
         super.stop();
         try {
             if(writer!=null) {
-                rows++;
                 HashMap finalMapToWrite = new HashMap();
                 finalMapToWrite.put("timestamp",previousTimestamp);
                 finalMapToWrite.put("values", bufferEntries);
