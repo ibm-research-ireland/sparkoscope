@@ -97,7 +97,7 @@ distribution.
 Please refer to the [Configuration Guide](http://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.
 
-# Spark Viz
+# SparkOscope
 
 ## Installation/Configuration
 
@@ -111,42 +111,28 @@ In spark-env.sh you need to set the HADOOP_CONF_DIR variable to the configuratio
 HADOOP_CONF_DIR=/path/to/hadoop/etc/hadoop
 ```
 
-Sigar metrics can be used as a source in the metrics.properties file:
+In order for the executor metrics to be stored in HDFS and therefore be retrieved by the UI, you need to have the following in the metrics.properties file:
 
 ```
-sigar.sink.csv.class=org.apache.spark.metrics.sink.CsvSink
-```
-
-```
-sigar.sink.csv.period=20
-```
-
-The above configuration will output the Sigar metrics in csv files. Check the metrics.properties documentation for additional parameters of CsvSink.
-
-In order for the metrics to be stored in HDFS and therefore by retrieved by the UI, you need to have the following in the metrics.properties file:
-
-```
-sigar.sink.hdfs.class=org.apache.spark.metrics.sink.SigarSink
+executor.sink.hdfs.class=org.apache.spark.metrics.sink.HDFSSink
 ```
 
 ```
-sigar.sink.hdfs.pollPeriod = 20
+executor.sink.hdfs.pollPeriod = 20
 ```
 
 ```
-sigar.sink.hdfs.dir = hdfs://localhost:9000/custom-metrics
+executor.sink.hdfs.dir = hdfs://localhost:9000/custom-metrics
 ```
 
 ```
-sigar.sink.hdfs.unit = seconds
+executor.sink.hdfs.unit = seconds
 ```
 
-CsvSink is not required for the UI to display the metrics.
-
-In spark-defaults.conf you need to add to java.library.path parameter of the executor the directory of the native libraries of sigar. For instance:
+In spark-envh.sh you need to add to LD_LIBRARY_PATH variable the directory of the native libraries of Sigar. For instance:
 
 ```
-spark.executor.extraJavaOptions -Djava.library.path=/path/to/hyperic-sigar-1.6.4/sigar-bin/lib/
+LD_LIBRARY_PATH=/path/to/hyperic-sigar-1.6.4/sigar-bin/lib/:$LD_LIBRARY_PATH
 ```
 
 Event logging must be enabled in spark-defaults.conf:
@@ -164,8 +150,33 @@ Also in spark-defaults.conf you should specify the folder from which the UI will
 spark.sigar.dir                  hdfs://127.0.0.1:9000/custom-metrics
 ```
 
+## Notes about the metrics
+
+The metrics are grouped per application and the user can access the plots by selecting the **Name** entry under the **Completed Applications** table.
+The URL on the browser should look similar to http://ip-of-spark-master:port/history/app-201511XXXXXX-XXX
+Under the dropdown menu **Executor Metrics** the user can plot any of the metrics provided per executor but also metrics of the operating system of the host (physical or virtual):
+
+### sigar.ram
+
+Percentage of RAM utilization
+
+### sigar.cpu
+
+Percentage of CPU utilization
+
+### sigar.kBytesRxPerSecond / sigar.kBytesTxPerSecond
+
+Number of Kilobytes received/transmitted from/to the network per second
+
+### sigar.kBytesReadPerSecond / sigar.kBytesWrittenPerSecond
+
+Number of Kilobytes read/written from/to the disk per second
+
+
 # **Important**: 
 
 The folders spark.eventLog.dir, sigar.sink.hdfs.dir and spark.sigar.dir must already exist in the HDFS.
 
-You should increase the limit for open files on the operating systems of the Master and the Workers
+You should increase the limit for open files on the operating systems of the Master and the Workers.
+
+Be sure to build spark according to the version of hadoop you are using.

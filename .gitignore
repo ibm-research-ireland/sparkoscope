@@ -1,67 +1,76 @@
-# Created by .ignore support plugin (hsz.mobi)
-### Maven template
-target/
-pom.xml.tag
-pom.xml.releaseBackup
-pom.xml.versionsBackup
-pom.xml.next
-release.properties
-dependency-reduced-pom.xml
-buildNumber.properties
-.mvn/timing.properties
-### R template
-# History files
-.Rhistory
-.Rapp.history
-
-# Example code in package build process
-*-Ex.R
-
-# RStudio files
-.Rproj.user/
-
-# produced vignettes
-vignettes/*.html
-vignettes/*.pdf
-
-# OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
-.httr-oauth
-### Example user template template
-### Example user template
-
-# IntelliJ project files
-.idea
+*~
+*.#*
+*#*#
+*.swp
+*.ipr
 *.iml
-out
-gen### Java template
-*.class
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
-
-# Package Files #
-*.jar
-*.war
-*.ear
-
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
-hs_err_pid*
-### Scala template
-*.class
-*.log
-
-# sbt specific
+*.iws
+*.pyc
+*.pyo
+.idea/
+.idea_modules/
+build/*.jar
+.settings
 .cache
-.history
-.lib/
-dist/*
+cache
+.generated-mima*
+work/
+out/
+.DS_Store
+third_party/libmesos.so
+third_party/libmesos.dylib
+build/apache-maven*
+build/zinc*
+build/scala*
+conf/java-opts
+conf/*.sh
+conf/*.cmd
+conf/*.properties
+conf/*.conf
+conf/*.xml
+conf/slaves
+docs/_site
+docs/api
 target/
+reports/
+.project
+.classpath
+.scala_dependencies
 lib_managed/
 src_managed/
 project/boot/
-project/plugins/project/
+project/plugins/project/build.properties
+project/build/target/
+project/plugins/target/
+project/plugins/lib_managed/
+project/plugins/src_managed/
+logs/
+log/
+spark-tests.log
+streaming-tests.log
+dependency-reduced-pom.xml
+.ensime
+.ensime_lucene
+checkpoint
+derby.log
+dist/
+dev/create-release/*txt
+dev/create-release/*final
+spark-*-bin-*.tgz
+unit-tests.log
+/lib/
+ec2/lib/
+rat-results.txt
+scalastyle.txt
+scalastyle-output.xml
+R-unit-tests.log
+R/unit-tests.out
+python/lib/pyspark.zip
+lint-r-report.log
 
-# Scala-IDE specific
-.scala_dependencies
-.worksheet
-
+# For Hive
+metastore_db/
+metastore/
+warehouse/
+TempStatsStore/
+sql/hive-thriftserver/test_warehouses

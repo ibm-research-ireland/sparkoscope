@@ -20,6 +20,10 @@ package org.apache.spark.ui
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
+import org.json4s.jackson.JsonMethods
+import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonDSL._
+
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
@@ -458,5 +462,15 @@ private[spark] object UIUtils extends Logging {
         logWarning(s"Invalid job description: $desc ", e)
         <span class="description-input">{desc}</span>
     }
+  }
+
+  def metricsTooltipsJson : String = {
+    compact(JsonMethods.render(
+      ("sigar.kBytesReadPerSecond" -> "Number of Kilobytes read from the disk per second") ~
+      ("sigar.kBytesWrittenPerSecond" -> "Number of Kilobytes written to the disk per second") ~
+      ("sigar.ram" -> "Percentage of RAM utilization") ~
+      ("sigar.cpu" -> "Percentage of CPU utilization") ~
+      ("sigar.kBytesRxPerSecond" -> "Number of Kilobytes received from the network per second") ~
+      ("sigar.kBytesTxPerSecond" -> "Number of Kilobytes transmitted to the network per second")))
   }
 }

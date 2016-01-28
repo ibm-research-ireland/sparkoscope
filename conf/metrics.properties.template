@@ -124,12 +124,6 @@
 # Polling directory for CsvSink
 #*.sink.csv.directory=/tmp/
 
-# HDFS Directory for HDFSSink
-# sigar.sink.hdfs.class=org.apache.spark.metrics.sink.HDFSSink
-# sigar.sink.hdfs.pollPeriod = 20
-# sigar.sink.hdfs.dir = hdfs://localhost:9000/custom-metrics
-# sigar.sink.hdfs.unit = seconds
-
 # Worker instance overlap polling period
 #worker.sink.csv.period=10
 

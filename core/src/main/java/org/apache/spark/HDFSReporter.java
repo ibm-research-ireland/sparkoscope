@@ -5,6 +5,7 @@ import com.codahale.metrics.Timer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
+import org.apache.spark.deploy.SparkHadoopUtil;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +26,6 @@ import org.apache.hadoop.fs.FileSystem;
 public class HDFSReporter extends ScheduledReporter {
 
     private String executorId;
-    private int rows = 0;
 
     public static Builder forRegistry(MetricRegistry registry) {
         return new Builder(registry);
@@ -264,10 +264,6 @@ public class HDFSReporter extends ScheduledReporter {
                 putLeaf(entries,0,bufferEntries,values[0]);
             } else {
 
-                rows++;
-
-                System.out.println("ROWS REPORTED ON APPEND= "+rows);
-
                 HashMap finalMapToWrite = new HashMap();
                 finalMapToWrite.put("timestamp",previousTimestamp);
                 finalMapToWrite.put("values", bufferEntries);
@@ -275,13 +271,9 @@ public class HDFSReporter extends ScheduledReporter {
                 String entryString = new JSONObject(finalMapToWrite).toString();
                 writer.write(entryString);
                 writer.newLine();
-
-                if(rows%20==0)
-                {
-                    writer.flush();
-                    hadoopDataStream.flush();
-                    hadoopDataStream.hsync();
-                }
+                writer.flush();
+                hadoopDataStream.flush();
+                hadoopDataStream.hsync();
 
                 bufferEntries.clear();
 
@@ -299,6 +291,7 @@ public class HDFSReporter extends ScheduledReporter {
     }
 
     private boolean createWriter(String appId,String executorId) {
+        System.out.println("Creating writer for "+appId+" and "+executorId);
         Path appFolder = new Path(directory + File.separator + appId);
         try {
             if (!fileSystem.exists(appFolder)) {
@@ -310,29 +303,21 @@ public class HDFSReporter extends ScheduledReporter {
             }
             hadoopDataStream = fileSystem.append(finalPath);
             writer = new BufferedWriter(new OutputStreamWriter(hadoopDataStream));
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            LOGGER.error("Exception when trying to create writer", e);
             return false;
         }
         return true;
     }
 
     private boolean setHadoopConf() {
-        configuration = new Configuration();
-        if(System.getenv().containsKey("HADOOP_CONF_DIR"))
-        {
-            String confDir = System.getenv().get("HADOOP_CONF_DIR");
-            File file = new File(confDir);
-            if(file.exists()&&file.isDirectory())
-            {
-                configuration.addResource(confDir);
-            }
-        }
-
+        configuration = SparkHadoopUtil.get().newConfiguration();
         try {
             fileSystem = Utils.getHadoopFileSystem(new URI(directory), configuration);
-        } catch (URISyntaxException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            LOGGER.error("Exception when trying set hadoop conf", e);
             return false;
         }
         return true;
@@ -355,8 +340,6 @@ public class HDFSReporter extends ScheduledReporter {
                 originalMap.put(entry, existing);
                 putLeaf(entries, index + 1, existing, value);
             }
-        } else {
-            System.out.println("UNKNOWN ENTRY= "+entry+","+originalMap+","+originalObj+","+originalMap.get(entry)+","+value);
         }
     }
 
@@ -364,8 +347,6 @@ public class HDFSReporter extends ScheduledReporter {
         super.stop();
         try {
             if(writer!=null) {
-                rows++;
-
                 HashMap finalMapToWrite = new HashMap();
                 finalMapToWrite.put("timestamp",previousTimestamp);
                 finalMapToWrite.put("values", bufferEntries);
@@ -377,11 +358,10 @@ public class HDFSReporter extends ScheduledReporter {
                 hadoopDataStream.flush();
                 hadoopDataStream.hsync();
                 writer.close();
-
-                System.out.println("ROWS REPORTED ON CLOSE= "+rows);
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            LOGGER.error("Exception when flush writes to HDFS", e);
         }
     }
 

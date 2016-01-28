@@ -9,4 +9,3 @@
 # spark.serializer                 org.apache.spark.serializer.KryoSerializer
 # spark.driver.memory              5g
 # spark.executor.extraJavaOptions  -XX:+PrintGCDetails -Dkey=value -Dnumbers="one two three"
-# spark.executor.extraJavaOptions  -Djava.library.path=/path/to/hyperic-sigar-1.6.4/sigar-bin/lib/

@@ -365,6 +365,17 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
              |]
         """.stripMargin
 
+        val jobInfoJson = listener.completedJobs.filter{ jobUIData =>
+          jobUIData.status != JobExecutionStatus.UNKNOWN && jobUIData.submissionTime.isDefined
+        }.map(job => compact(JsonMethods.render(("jobId" -> job.jobId) ~ ("submitted" -> job.submissionTime.get)))).mkString(",")
+
+        val jobInfoAsStr =
+          s"""
+             |[
+             |${jobInfoJson}
+             |]
+        """.stripMargin
+
         content ++= <div id="executor-parent">
           <label><b>Executor Metrics:</b></label>
           <select id="executor-metric-option">
@@ -374,7 +385,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         </div>
 
         content ++= <script type="text/javascript">
-          {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr},${stageInfoAsStr});")}
+          {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr},${stageInfoAsStr},${jobInfoAsStr},${UIUtils.metricsTooltipsJson});")}
         </script>
       }
       content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,

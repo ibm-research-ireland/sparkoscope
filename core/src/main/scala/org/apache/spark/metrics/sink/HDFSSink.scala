@@ -33,7 +33,7 @@ private[spark] class HDFSSink(val property: Properties, val registry: MetricRegi
                              securityMgr: SecurityManager) extends Sink {
   val HDFS_KEY_PERIOD = "period"
   val HDFS_KEY_UNIT = "unit"
-  val HDFS_KEY_DIR = "directory"
+  val HDFS_KEY_DIR = "dir"
 
   val HDFS_DEFAULT_PERIOD = 10
   val HDFS_DEFAULT_UNIT = "SECONDS"
