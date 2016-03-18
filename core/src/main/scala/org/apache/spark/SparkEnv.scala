@@ -45,35 +45,35 @@ import org.apache.spark.unsafe.memory.{ExecutorMemoryManager, MemoryAllocator}
 import org.apache.spark.util.{RpcUtils, Utils}
 
 /**
- * :: DeveloperApi ::
- * Holds all the runtime environment objects for a running Spark instance (either master or worker),
- * including the serializer, Akka actor system, block manager, map output tracker, etc. Currently
- * Spark code finds the SparkEnv through a global variable, so all the threads can access the same
- * SparkEnv. It can be accessed by SparkEnv.get (e.g. after creating a SparkContext).
- *
- * NOTE: This is not intended for external use. This is exposed for Shark and may be made private
- *       in a future release.
- */
+  * :: DeveloperApi ::
+  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
+  * including the serializer, Akka actor system, block manager, map output tracker, etc. Currently
+  * Spark code finds the SparkEnv through a global variable, so all the threads can access the same
+  * SparkEnv. It can be accessed by SparkEnv.get (e.g. after creating a SparkContext).
+  *
+  * NOTE: This is not intended for external use. This is exposed for Shark and may be made private
+  *       in a future release.
+  */
 @DeveloperApi
 class SparkEnv (
-    val executorId: String,
-    private[spark] val rpcEnv: RpcEnv,
-    val serializer: Serializer,
-    val closureSerializer: Serializer,
-    val cacheManager: CacheManager,
-    val mapOutputTracker: MapOutputTracker,
-    val shuffleManager: ShuffleManager,
-    val broadcastManager: BroadcastManager,
-    val blockTransferService: BlockTransferService,
-    val blockManager: BlockManager,
-    val securityManager: SecurityManager,
-    val httpFileServer: HttpFileServer,
-    val sparkFilesDir: String,
-    val metricsSystem: MetricsSystem,
-    val shuffleMemoryManager: ShuffleMemoryManager,
-    val executorMemoryManager: ExecutorMemoryManager,
-    val outputCommitCoordinator: OutputCommitCoordinator,
-    val conf: SparkConf) extends Logging {
+                 val executorId: String,
+                 private[spark] val rpcEnv: RpcEnv,
+                 val serializer: Serializer,
+                 val closureSerializer: Serializer,
+                 val cacheManager: CacheManager,
+                 val mapOutputTracker: MapOutputTracker,
+                 val shuffleManager: ShuffleManager,
+                 val broadcastManager: BroadcastManager,
+                 val blockTransferService: BlockTransferService,
+                 val blockManager: BlockManager,
+                 val securityManager: SecurityManager,
+                 val httpFileServer: HttpFileServer,
+                 val sparkFilesDir: String,
+                 val metricsSystem: MetricsSystem,
+                 val shuffleMemoryManager: ShuffleMemoryManager,
+                 val executorMemoryManager: ExecutorMemoryManager,
+                 val outputCommitCoordinator: OutputCommitCoordinator,
+                 val conf: SparkConf) extends Logging {
 
   // TODO Remove actorSystem
   @deprecated("Actor system is no longer supported as of 1.4.0", "1.4.0")
@@ -153,7 +153,6 @@ class SparkEnv (
   }
 }
 
-//noinspection ScalaStyle
 object SparkEnv extends Logging {
   @volatile private var env: SparkEnv = _
 
@@ -165,29 +164,29 @@ object SparkEnv extends Logging {
   }
 
   /**
-   * Returns the SparkEnv.
-   */
+    * Returns the SparkEnv.
+    */
   def get: SparkEnv = {
     env
   }
 
   /**
-   * Returns the ThreadLocal SparkEnv.
-   */
+    * Returns the ThreadLocal SparkEnv.
+    */
   @deprecated("Use SparkEnv.get instead", "1.2.0")
   def getThreadLocal: SparkEnv = {
     env
   }
 
   /**
-   * Create a SparkEnv for the driver.
-   */
+    * Create a SparkEnv for the driver.
+    */
   private[spark] def createDriverEnv(
-      conf: SparkConf,
-      isLocal: Boolean,
-      listenerBus: LiveListenerBus,
-      numCores: Int,
-      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
+                                      conf: SparkConf,
+                                      isLocal: Boolean,
+                                      listenerBus: LiveListenerBus,
+                                      numCores: Int,
+                                      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
     assert(conf.contains("spark.driver.host"), "spark.driver.host is not set on the driver!")
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
     val hostname = conf.get("spark.driver.host")
@@ -206,16 +205,16 @@ object SparkEnv extends Logging {
   }
 
   /**
-   * Create a SparkEnv for an executor.
-   * In coarse-grained mode, the executor provides an actor system that is already instantiated.
-   */
+    * Create a SparkEnv for an executor.
+    * In coarse-grained mode, the executor provides an actor system that is already instantiated.
+    */
   private[spark] def createExecutorEnv(
-      conf: SparkConf,
-      executorId: String,
-      hostname: String,
-      port: Int,
-      numCores: Int,
-      isLocal: Boolean): SparkEnv = {
+                                        conf: SparkConf,
+                                        executorId: String,
+                                        hostname: String,
+                                        port: Int,
+                                        numCores: Int,
+                                        isLocal: Boolean): SparkEnv = {
     val env = create(
       conf,
       executorId,
@@ -230,18 +229,18 @@ object SparkEnv extends Logging {
   }
 
   /**
-   * Helper method to create a SparkEnv for a driver or an executor.
-   */
+    * Helper method to create a SparkEnv for a driver or an executor.
+    */
   private def create(
-      conf: SparkConf,
-      executorId: String,
-      hostname: String,
-      port: Int,
-      isDriver: Boolean,
-      isLocal: Boolean,
-      numUsableCores: Int,
-      listenerBus: LiveListenerBus = null,
-      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
+                      conf: SparkConf,
+                      executorId: String,
+                      hostname: String,
+                      port: Int,
+                      isDriver: Boolean,
+                      isLocal: Boolean,
+                      numUsableCores: Int,
+                      listenerBus: LiveListenerBus = null,
+                      mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 
     // Listener bus is only used on the driver
     if (isDriver) {
@@ -296,8 +295,8 @@ object SparkEnv extends Logging {
       "spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
 
     def registerOrLookupEndpoint(
-        name: String, endpointCreator: => RpcEndpoint):
-      RpcEndpointRef = {
+                                  name: String, endpointCreator: => RpcEndpoint):
+    RpcEndpointRef = {
       if (isDriver) {
         logInfo("Registering " + name)
         rpcEnv.setupEndpoint(name, endpointCreator)
@@ -332,7 +331,7 @@ object SparkEnv extends Logging {
     val blockTransferService =
       conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
         case "netty" =>
-           new NettyBlockTransferService(conf, securityManager, numUsableCores)
+          new NettyBlockTransferService(conf, securityManager, numUsableCores)
         case "nio" =>
           logWarning("NIO-based block transfer service is deprecated, " +
             "and will be removed in Spark 1.6.0.")
@@ -435,16 +434,16 @@ object SparkEnv extends Logging {
   }
 
   /**
-   * Return a map representation of jvm information, Spark properties, system properties, and
-   * class paths. Map keys define the category, and map values represent the corresponding
-   * attributes as a sequence of KV pairs. This is used mainly for SparkListenerEnvironmentUpdate.
-   */
+    * Return a map representation of jvm information, Spark properties, system properties, and
+    * class paths. Map keys define the category, and map values represent the corresponding
+    * attributes as a sequence of KV pairs. This is used mainly for SparkListenerEnvironmentUpdate.
+    */
   private[spark]
   def environmentDetails(
-      conf: SparkConf,
-      schedulingMode: String,
-      addedJars: Seq[String],
-      addedFiles: Seq[String]): Map[String, Seq[(String, String)]] = {
+                          conf: SparkConf,
+                          schedulingMode: String,
+                          addedJars: Seq[String],
+                          addedFiles: Seq[String]): Map[String, Seq[(String, String)]] = {
 
     import Properties._
     val jvmInformation = Seq(
