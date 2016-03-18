@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
 
 /**
  * A BlockTransferService that uses Netty to fetch a set of blocks at at time.
-  */
+ */
 class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManager, numCores: Int)
   extends BlockTransferService {
 
@@ -76,11 +76,11 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
   }
 
   override def fetchBlocks(
-                            host: String,
-                            port: Int,
-                            execId: String,
-                            blockIds: Array[String],
-                            listener: BlockFetchingListener): Unit = {
+      host: String,
+      port: Int,
+      execId: String,
+      blockIds: Array[String],
+      listener: BlockFetchingListener): Unit = {
     logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
