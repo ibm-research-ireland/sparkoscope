@@ -17,15 +17,22 @@
 
 package org.apache.spark.ui.jobs
 
+import org.apache.spark.util.JsonProtocol
+import org.json4s.JsonAST.JValue
+import org.json4s.jackson.JsonMethods
+
+import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonDSL._
+
+import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.xml.{Node, NodeSeq, Unparsed, Utility}
+
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.{HashMap, ListBuffer}
-import scala.xml._
-
-import org.apache.spark.JobExecutionStatus
-import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
+import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
+import org.apache.spark.JobExecutionStatus
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
@@ -333,6 +340,58 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
       var content = summary
       val executorListener = parent.executorListener
+      var hdfsExecutorMetricsListener = parent.hdfsExecutorMetricsListener
+
+      val stageInfo = completedJobs
+        .flatMap(job => job.stageIds.map(stage => (job,stage)))
+        .map(jobStage => {
+          val jobId = jobStage._1.jobId
+          val stageId = jobStage._2
+          val stageInfo = parent.jobProgresslistener.stageIdToInfo.get(stageId)
+          (jobId,stageInfo.get.name,stageInfo.get.submissionTime.get)
+        })
+        .map(job =>  compact(JsonMethods.render(("jobId" -> job._3) ~ ("name" -> job._2) ~ ("submitted" -> job._3)))).mkString(",")
+
+      val stageInfoAsStr =
+        s"""
+           |[
+           |${stageInfo}
+           |]
+        """.stripMargin
+
+      if(hdfsExecutorMetricsListener.hdfsExecutorMetricsData.size>0)
+      {
+        var hdfsExecutorMetricsDataJson = hdfsExecutorMetricsListener.hdfsExecutorMetricsData.map(e=> compact(JsonMethods.render(JsonProtocol.sparkEventToJson(e)))).mkString(",")
+        val hdfsExecutorMetricsDataJsonAsStr =
+          s"""
+             |[
+             |${hdfsExecutorMetricsDataJson}
+             |]
+        """.stripMargin
+
+        val jobInfoJson = listener.completedJobs.filter{ jobUIData =>
+          jobUIData.status != JobExecutionStatus.UNKNOWN && jobUIData.submissionTime.isDefined
+        }.map(job => compact(JsonMethods.render(("jobId" -> job.jobId) ~ ("submitted" -> job.submissionTime.get)))).mkString(",")
+
+        val jobInfoAsStr =
+          s"""
+             |[
+             |${jobInfoJson}
+             |]
+        """.stripMargin
+
+        content ++= <div id="executor-parent">
+          <label><b>Executor Metrics:</b></label>
+          <select id="executor-metric-option">
+            <option value="NULL">-- Select --</option>
+          </select>
+          <div id="executor-metrics"></div>
+        </div>
+
+        content ++= <script type="text/javascript">
+          {Unparsed(s"parseExecutorMetrics(${hdfsExecutorMetricsDataJsonAsStr},${stageInfoAsStr},${jobInfoAsStr},${UIUtils.metricsTooltipsJson});")}
+        </script>
+      }
       content ++= makeTimeline(activeJobs ++ completedJobs ++ failedJobs,
           executorListener.executorIdToData, startTime)
 

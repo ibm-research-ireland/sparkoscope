@@ -21,6 +21,10 @@ import java.net.URLDecoder
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
+import org.json4s.jackson.JsonMethods
+import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonDSL._
+
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
@@ -160,6 +164,8 @@ private[spark] object UIUtils extends Logging {
     <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/metricsgraphics.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/sigar-viz.css")} type="text/css"/>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
     <script src={prependBaseUri("/static/vis.min.js")}></script>
@@ -168,6 +174,9 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/table.js")}></script>
     <script src={prependBaseUri("/static/additional-metrics.js")}></script>
     <script src={prependBaseUri("/static/timeline-view.js")}></script>
+    <script src={prependBaseUri("/static/d3.min.js")}></script>
+    <script src={prependBaseUri("/static/metricsgraphics.min.js")}></script>
+    <script src={prependBaseUri("/static/sigar-viz.js")}></script>
   }
 
   def vizHeaderNodes: Seq[Node] = {
@@ -453,6 +462,7 @@ private[spark] object UIUtils extends Logging {
     }
   }
 
+<<<<<<< ours
   /**
    * Decode URLParameter if URL is encoded by YARN-WebAppProxyServlet.
    * Due to YARN-2844: WebAppProxyServlet cannot handle urls which contain encoded characters
@@ -466,5 +476,15 @@ private[spark] object UIUtils extends Logging {
       decodedParam = URLDecoder.decode(param, "UTF-8")
     }
     param
+=======
+  def metricsTooltipsJson : String = {
+    compact(JsonMethods.render(
+      ("sigar.kBytesReadPerSecond" -> "Number of Kilobytes read from the disk per second") ~
+      ("sigar.kBytesWrittenPerSecond" -> "Number of Kilobytes written to the disk per second") ~
+      ("sigar.ram" -> "Percentage of RAM utilization") ~
+      ("sigar.cpu" -> "Percentage of CPU utilization") ~
+      ("sigar.kBytesRxPerSecond" -> "Number of Kilobytes received from the network per second") ~
+      ("sigar.kBytesTxPerSecond" -> "Number of Kilobytes transmitted to the network per second")))
+>>>>>>> theirs
   }
 }

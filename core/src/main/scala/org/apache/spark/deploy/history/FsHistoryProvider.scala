@@ -191,10 +191,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       applications.get(appId).flatMap { appInfo =>
         appInfo.attempts.find(_.attemptId == attemptId).flatMap { attempt =>
           val replayBus = new ReplayListenerBus()
+          val hdfsExecutorMetricsBus = new HDFSExecutorMetricsReplayListenerBus()
           val ui = {
             val conf = this.conf.clone()
             val appSecManager = new SecurityManager(conf)
-            SparkUI.createHistoryUI(conf, replayBus, appSecManager, appInfo.name,
+            SparkUI.createHistoryUI(conf, replayBus, Some(hdfsExecutorMetricsBus), appSecManager, appId,
               HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
