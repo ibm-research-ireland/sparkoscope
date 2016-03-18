@@ -462,7 +462,6 @@ private[spark] object UIUtils extends Logging {
     }
   }
 
-<<<<<<< ours
   /**
    * Decode URLParameter if URL is encoded by YARN-WebAppProxyServlet.
    * Due to YARN-2844: WebAppProxyServlet cannot handle urls which contain encoded characters
@@ -476,15 +475,15 @@ private[spark] object UIUtils extends Logging {
       decodedParam = URLDecoder.decode(param, "UTF-8")
     }
     param
-=======
-  def metricsTooltipsJson : String = {
+  }
+
+  def metricsTooltipsJson: String = {
     compact(JsonMethods.render(
       ("sigar.kBytesReadPerSecond" -> "Number of Kilobytes read from the disk per second") ~
-      ("sigar.kBytesWrittenPerSecond" -> "Number of Kilobytes written to the disk per second") ~
-      ("sigar.ram" -> "Percentage of RAM utilization") ~
-      ("sigar.cpu" -> "Percentage of CPU utilization") ~
-      ("sigar.kBytesRxPerSecond" -> "Number of Kilobytes received from the network per second") ~
-      ("sigar.kBytesTxPerSecond" -> "Number of Kilobytes transmitted to the network per second")))
->>>>>>> theirs
+        ("sigar.kBytesWrittenPerSecond" -> "Number of Kilobytes written to the disk per second") ~
+        ("sigar.ram" -> "Percentage of RAM utilization") ~
+        ("sigar.cpu" -> "Percentage of CPU utilization") ~
+        ("sigar.kBytesRxPerSecond" -> "Number of Kilobytes received from the network per second") ~
+        ("sigar.kBytesTxPerSecond" -> "Number of Kilobytes transmitted to the network per second")))
   }
 }
