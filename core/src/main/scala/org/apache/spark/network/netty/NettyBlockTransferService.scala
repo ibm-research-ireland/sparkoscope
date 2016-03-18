@@ -110,12 +110,12 @@ class NettyBlockTransferService(conf: SparkConf, securityManager: SecurityManage
   override def port: Int = server.getPort
 
   override def uploadBlock(
-                            hostname: String,
-                            port: Int,
-                            execId: String,
-                            blockId: BlockId,
-                            blockData: ManagedBuffer,
-                            level: StorageLevel): Future[Unit] = {
+      hostname: String,
+      port: Int,
+      execId: String,
+      blockId: BlockId,
+      blockData: ManagedBuffer,
+      level: StorageLevel): Future[Unit] = {
     val result = Promise[Unit]()
     val client = clientFactory.createClient(hostname, port)
 
