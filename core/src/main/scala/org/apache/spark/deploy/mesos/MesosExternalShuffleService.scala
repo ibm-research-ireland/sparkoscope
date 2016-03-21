@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.mesos
 
 import java.net.SocketAddress
+import java.nio.ByteBuffer
 
 import scala.collection.mutable
 
@@ -34,7 +35,7 @@ import org.apache.spark.network.util.TransportConf
  * It detects driver termination and calls the cleanup callback to [[ExternalShuffleService]].
  */
 private[mesos] class MesosExternalShuffleBlockHandler(transportConf: TransportConf)
-  extends ExternalShuffleBlockHandler(transportConf) with Logging {
+  extends ExternalShuffleBlockHandler(transportConf, null) with Logging {
 
   // Stores a map of driver socket addresses to app ids
   private val connectedApps = new mutable.HashMap[SocketAddress, String]
@@ -56,7 +57,7 @@ private[mesos] class MesosExternalShuffleBlockHandler(transportConf: TransportCo
           }
         }
         connectedApps(address) = appId
-        callback.onSuccess(new Array[Byte](0))
+        callback.onSuccess(ByteBuffer.allocate(0))
       case _ => super.handleMessage(message, client, callback)
     }
   }

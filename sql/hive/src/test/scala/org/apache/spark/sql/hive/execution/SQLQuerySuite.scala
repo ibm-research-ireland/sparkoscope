@@ -19,16 +19,14 @@ package org.apache.spark.sql.hive.execution
 
 import java.sql.{Date, Timestamp}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.DefaultParserDialect
+import org.apache.spark.sql.catalyst.{TableIdentifier, DefaultParserDialect}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.errors.DialectException
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.hive.{HiveContext, HiveQLDialect, MetastoreRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.test.SQLTestUtils
@@ -65,12 +63,12 @@ class MyDialect extends DefaultParserDialect
  * Hive to generate them (in contrast to HiveQuerySuite).  Often this is because the query is
  * valid, but Hive currently cannot execute it.
  */
-class SQLQuerySuite extends QueryTest with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
-  private val sqlContext = _sqlContext
+class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import hiveContext._
+  import hiveContext.implicits._
 
   test("UDTF") {
-    sql(s"ADD JAR ${TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+    sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
     // The function source code can be found at:
     // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
     sql(
@@ -162,10 +160,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   }
 
   test("show functions") {
-    val allFunctions =
+    val allBuiltinFunctions =
       (FunctionRegistry.builtin.listFunction().toSet[String] ++
-        org.apache.hadoop.hive.ql.exec.FunctionRegistry.getFunctionNames).toList.sorted
-    checkAnswer(sql("SHOW functions"), allFunctions.map(Row(_)))
+        org.apache.hadoop.hive.ql.exec.FunctionRegistry.getFunctionNames.asScala).toList.sorted
+    // The TestContext is shared by all the test cases, some functions may be registered before
+    // this, so we check that all the builtin functions are returned.
+    val allFunctions = sql("SHOW functions").collect().map(r => r(0))
+    allBuiltinFunctions.foreach { f =>
+      assert(allFunctions.contains(f))
+    }
     checkAnswer(sql("SHOW functions abs"), Row("abs"))
     checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
     checkAnswer(sql("SHOW functions abc.abs"), Row("abs"))
@@ -263,7 +266,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("CTAS without serde") {
     def checkRelation(tableName: String, isDataSourceParquet: Boolean): Unit = {
-      val relation = EliminateSubQueries(catalog.lookupRelation(Seq(tableName)))
+      val relation = EliminateSubQueries(catalog.lookupRelation(TableIdentifier(tableName)))
       relation match {
         case LogicalRelation(r: ParquetRelation, _) =>
           if (!isDataSourceParquet) {
@@ -330,6 +333,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
       setConf(HiveContext.CONVERT_CTAS, originalConf)
       sql("DROP TABLE IF EXISTS ctas1")
     }
+  }
+
+  test("SQL dialect at the start of HiveContext") {
+    val hiveContext = new HiveContext(sqlContext.sparkContext)
+    val dialectConf = "spark.sql.dialect"
+    checkAnswer(hiveContext.sql(s"set $dialectConf"), Row(dialectConf, "hiveql"))
+    assert(hiveContext.getSQLDialect().getClass === classOf[HiveQLDialect])
   }
 
   test("SQL Dialect Switching") {
@@ -509,19 +519,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       Row(1))
-    checkAnswer(sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested"),
-      Seq.empty[Row])
+
+    sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested")
     checkAnswer(
       sql("SELECT * FROM test_ctas_1234"),
       sql("SELECT * FROM nested").collect().toSeq)
 
     intercept[AnalysisException] {
-      sql("CREATE TABLE test_ctas_12345 AS SELECT * from notexists").collect()
+      sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
     }
   }
 
   test("test CTAS") {
-    checkAnswer(sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src"), Seq.empty[Row])
+    sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
     checkAnswer(
       sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
@@ -614,7 +624,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
-    TestHive.createDataFrame(rowRdd, schema).registerTempTable("testTable")
+    hiveContext.createDataFrame(rowRdd, schema).registerTempTable("testTable")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes
@@ -720,7 +730,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     (1 to 100).par.map { i =>
       val tableName = s"SPARK_6618_table_$i"
       sql(s"CREATE TABLE $tableName (col1 string)")
-      catalog.lookupRelation(Seq(tableName))
+      catalog.lookupRelation(TableIdentifier(tableName))
       table(tableName)
       tables()
       sql(s"DROP TABLE $tableName")
@@ -1071,10 +1081,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
     val thread = new Thread {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
-        TestHive.sql(
-          s"ADD JAR ${TestHive.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
+        sql(
+          s"ADD JAR ${hiveContext.getHiveFile("hive-contrib-0.13.1.jar").getCanonicalPath()}")
         try {
-          TestHive.sql(
+          sql(
             """
               |CREATE TEMPORARY FUNCTION example_max
               |AS 'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax'
@@ -1124,21 +1134,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-8588 HiveTypeCoercion.inConversion fires too early") {
     val df =
-      TestHive.createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
+      createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
     df.toDF("id", "datef").registerTempTable("test_SPARK8588")
     checkAnswer(
-      TestHive.sql(
+      sql(
         """
           |select id, concat(year(datef))
           |from test_SPARK8588 where concat(year(datef), ' year') in ('2015 year', '2014 year')
         """.stripMargin),
       Row(1, "2014") :: Row(2, "2015") :: Nil
     )
-    TestHive.dropTempTable("test_SPARK8588")
+    dropTempTable("test_SPARK8588")
   }
 
   test("SPARK-9371: fix the support for special chars in column names for hive context") {
-    TestHive.read.json(TestHive.sparkContext.makeRDD(
+    read.json(sparkContext.makeRDD(
       """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
       .registerTempTable("t")
 
@@ -1169,8 +1179,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
   test("specifying database name for a temporary table is not allowed") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df =
-        sqlContext.sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
       df
         .write
         .format("parquet")
@@ -1277,5 +1286,197 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils {
           |ORDER BY AVG(c2)
         """.stripMargin), Row("b", 6.0) :: Row("a", 7.0) :: Nil)
     }
+  }
+
+  test("run sql directly on files") {
+    val df = sqlContext.range(100)
+    withTempPath(f => {
+      df.write.parquet(f.getCanonicalPath)
+      checkAnswer(sql(s"select id from parquet.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select id from `org.apache.spark.sql.parquet`.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select a.id from parquet.`${f.getCanonicalPath}` as a"),
+        df)
+    })
+  }
+
+  test("correctly parse CREATE VIEW statement") {
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
+      withTable("jt") {
+        val df = (1 until 10).map(i => i -> i).toDF("i", "j")
+        df.write.format("json").saveAsTable("jt")
+        sql(
+          """CREATE VIEW IF NOT EXISTS
+            |default.testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
+            |COMMENT 'blabla'
+            |TBLPROPERTIES ('a' = 'b')
+            |AS SELECT * FROM jt""".stripMargin)
+        checkAnswer(sql("SELECT c1, c2 FROM testView ORDER BY c1"), (1 to 9).map(i => Row(i, i)))
+        sql("DROP VIEW testView")
+      }
+    }
+  }
+
+  test("correctly handle CREATE VIEW IF NOT EXISTS") {
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
+      withTable("jt", "jt2") {
+        sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+        sql("CREATE VIEW testView AS SELECT id FROM jt")
+
+        val df = (1 until 10).map(i => i -> i).toDF("i", "j")
+        df.write.format("json").saveAsTable("jt2")
+        sql("CREATE VIEW IF NOT EXISTS testView AS SELECT * FROM jt2")
+
+        // make sure our view doesn't change.
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
+        sql("DROP VIEW testView")
+      }
+    }
+  }
+
+  test("correctly handle CREATE OR REPLACE VIEW") {
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
+      withTable("jt", "jt2") {
+        sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+        sql("CREATE OR REPLACE VIEW testView AS SELECT id FROM jt")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
+
+        val df = (1 until 10).map(i => i -> i).toDF("i", "j")
+        df.write.format("json").saveAsTable("jt2")
+        sql("CREATE OR REPLACE VIEW testView AS SELECT * FROM jt2")
+        // make sure the view has been changed.
+        checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
+
+        sql("DROP VIEW testView")
+
+        val e = intercept[AnalysisException] {
+          sql("CREATE OR REPLACE VIEW IF NOT EXISTS testView AS SELECT id FROM jt")
+        }
+        assert(e.message.contains("not allowed to define a view"))
+      }
+    }
+  }
+
+  test("correctly handle ALTER VIEW") {
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
+      withTable("jt", "jt2") {
+        sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+        sql("CREATE VIEW testView AS SELECT id FROM jt")
+
+        val df = (1 until 10).map(i => i -> i).toDF("i", "j")
+        df.write.format("json").saveAsTable("jt2")
+        sql("ALTER VIEW testView AS SELECT * FROM jt2")
+        // make sure the view has been changed.
+        checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
+
+        sql("DROP VIEW testView")
+      }
+    }
+  }
+
+  test("create hive view for json table") {
+    // json table is not hive-compatible, make sure the new flag fix it.
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
+      withTable("jt") {
+        sqlContext.range(1, 10).write.format("json").saveAsTable("jt")
+        sql("CREATE VIEW testView AS SELECT id FROM jt")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
+        sql("DROP VIEW testView")
+      }
+    }
+  }
+
+  test("create hive view for partitioned parquet table") {
+    // partitioned parquet table is not hive-compatible, make sure the new flag fix it.
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
+      withTable("parTable") {
+        val df = Seq(1 -> "a").toDF("i", "j")
+        df.write.format("parquet").partitionBy("i").saveAsTable("parTable")
+        sql("CREATE VIEW testView AS SELECT i, j FROM parTable")
+        checkAnswer(sql("SELECT * FROM testView"), Row(1, "a"))
+        sql("DROP VIEW testView")
+      }
+    }
+  }
+
+  test("create hive view for joined tables") {
+    // make sure the new flag can handle some complex cases like join and schema change.
+    withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
+      withTable("jt1", "jt2") {
+        sqlContext.range(1, 10).toDF("id1").write.format("json").saveAsTable("jt1")
+        sqlContext.range(1, 10).toDF("id2").write.format("json").saveAsTable("jt2")
+        sql("CREATE VIEW testView AS SELECT * FROM jt1 JOIN jt2 ON id1 == id2")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
+
+        val df = (1 until 10).map(i => i -> i).toDF("id1", "newCol")
+        df.write.format("json").mode(SaveMode.Overwrite).saveAsTable("jt1")
+        checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
+
+        sql("DROP VIEW testView")
+      }
+    }
+  }
+
+  test("SPARK-10562: partition by column with mixed case name") {
+    withTable("tbl10562") {
+      val df = Seq(2012 -> "a").toDF("Year", "val")
+      df.write.partitionBy("Year").saveAsTable("tbl10562")
+      checkAnswer(sql("SELECT Year FROM tbl10562"), Row(2012))
+      checkAnswer(sql("SELECT yEAr FROM tbl10562"), Row(2012))
+      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year > 2015"), Nil)
+      checkAnswer(sql("SELECT val FROM tbl10562 WHERE Year == 2012"), Row("a"))
+    }
+  }
+
+  test("SPARK-11453: append data to partitioned table") {
+    withTable("tbl11453") {
+      Seq("1" -> "10", "2" -> "20").toDF("i", "j")
+        .write.partitionBy("i").saveAsTable("tbl11453")
+
+      Seq("3" -> "30").toDF("i", "j")
+        .write.mode(SaveMode.Append).partitionBy("i").saveAsTable("tbl11453")
+      checkAnswer(
+        sqlContext.read.table("tbl11453").select("i", "j").orderBy("i"),
+        Row("1", "10") :: Row("2", "20") :: Row("3", "30") :: Nil)
+
+      // make sure case sensitivity is correct.
+      Seq("4" -> "40").toDF("i", "j")
+        .write.mode(SaveMode.Append).partitionBy("I").saveAsTable("tbl11453")
+      checkAnswer(
+        sqlContext.read.table("tbl11453").select("i", "j").orderBy("i"),
+        Row("1", "10") :: Row("2", "20") :: Row("3", "30") :: Row("4", "40") :: Nil)
+    }
+  }
+
+  test("SPARK-11590: use native json_tuple in lateral view") {
+    checkAnswer(sql(
+      """
+        |SELECT a, b
+        |FROM (SELECT '{"f1": "value1", "f2": 12}' json) test
+        |LATERAL VIEW json_tuple(json, 'f1', 'f2') jt AS a, b
+      """.stripMargin), Row("value1", "12"))
+
+    // we should use `c0`, `c1`... as the name of fields if no alias is provided, to follow hive.
+    checkAnswer(sql(
+      """
+        |SELECT c0, c1
+        |FROM (SELECT '{"f1": "value1", "f2": 12}' json) test
+        |LATERAL VIEW json_tuple(json, 'f1', 'f2') jt
+      """.stripMargin), Row("value1", "12"))
+
+    // we can also use `json_tuple` in project list.
+    checkAnswer(sql(
+      """
+        |SELECT json_tuple(json, 'f1', 'f2')
+        |FROM (SELECT '{"f1": "value1", "f2": 12}' json) test
+      """.stripMargin), Row("value1", "12"))
+
+    // we can also mix `json_tuple` with other project expressions.
+    checkAnswer(sql(
+      """
+        |SELECT json_tuple(json, 'f1', 'f2'), 3.14, str
+        |FROM (SELECT '{"f1": "value1", "f2": 12}' json, 'hello' as str) test
+      """.stripMargin), Row("value1", "12", 3.14, "hello"))
   }
 }

@@ -23,7 +23,7 @@ import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.Matchers
+import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
@@ -42,14 +42,14 @@ import org.apache.spark.util.{ResetSystemProperties, Utils}
 class HiveSparkSubmitSuite
   extends SparkFunSuite
   with Matchers
-  // This test suite sometimes gets extremely slow out of unknown reason on Jenkins.  Here we
-  // add a timestamp to provide more diagnosis information.
+  with BeforeAndAfterEach
   with ResetSystemProperties
   with Timeouts {
 
   // TODO: rewrite these or mark them as slow tests to be run sparingly
 
-  def beforeAll() {
+  override def beforeEach() {
+    super.beforeEach()
     System.setProperty("spark.testing", "true")
   }
 
@@ -66,6 +66,7 @@ class HiveSparkSubmitSuite
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
       "--jars", jarsString,
       unusedJar.toString, "SparkSubmitClassA", "SparkSubmitClassB")
     runSparkSubmit(args)
@@ -79,6 +80,7 @@ class HiveSparkSubmitSuite
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -93,17 +95,21 @@ class HiveSparkSubmitSuite
     val args = Seq(
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
       "--class", "Main",
       testJar)
     runSparkSubmit(args)
   }
 
-  test("SPARK-9757 Persist Parquet relation with decimal column") {
+  ignore("SPARK-9757 Persist Parquet relation with decimal column") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SPARK_9757.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
       "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -114,6 +120,9 @@ class HiveSparkSubmitSuite
       "--class", SPARK_11009.getClass.getName.stripSuffix("$"),
       "--name", "SparkSQLConfTest",
       "--master", "local-cluster[2,1,1024]",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
+      "--driver-java-options", "-Dderby.system.durability=test",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -184,6 +193,7 @@ object SparkSubmitClassLoaderTest extends Logging {
   def main(args: Array[String]) {
     Utils.configTestLog4j("INFO")
     val conf = new SparkConf()
+    conf.set("spark.ui.enabled", "false")
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     val df = hiveContext.createDataFrame((1 to 100).map(i => (i, i))).toDF("i", "j")
@@ -275,6 +285,7 @@ object SparkSQLConfTest extends Logging {
       // For this simple test, we do not really clone this object.
       override def clone: SparkConf = this
     }
+    conf.set("spark.ui.enabled", "false")
     val sc = new SparkContext(conf)
     val hiveContext = new TestHiveContext(sc)
     // Run a simple command to make sure all lazy vals in hiveContext get instantiated.
@@ -283,19 +294,23 @@ object SparkSQLConfTest extends Logging {
   }
 }
 
-object SPARK_9757 extends QueryTest with Logging {
+object SPARK_9757 extends QueryTest {
+  import org.apache.spark.sql.functions._
+
+  protected var sqlContext: SQLContext = _
+
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
     val sparkContext = new SparkContext(
       new SparkConf()
         .set("spark.sql.hive.metastore.version", "0.13.1")
-        .set("spark.sql.hive.metastore.jars", "maven"))
+        .set("spark.sql.hive.metastore.jars", "maven")
+        .set("spark.ui.enabled", "false"))
 
     val hiveContext = new TestHiveContext(sparkContext)
+    sqlContext = hiveContext
     import hiveContext.implicits._
-
-    import org.apache.spark.sql.functions._
 
     val dir = Utils.createTempDir()
     dir.delete()

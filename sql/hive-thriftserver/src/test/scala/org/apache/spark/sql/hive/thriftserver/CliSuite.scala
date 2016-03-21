@@ -27,7 +27,7 @@ import scala.concurrent.{Await, Promise}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkFunSuite}
@@ -36,21 +36,26 @@ import org.apache.spark.{Logging, SparkFunSuite}
  * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
  * Hive metastore and warehouse.
  */
-class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
+class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   val warehousePath = Utils.createTempDir()
   val metastorePath = Utils.createTempDir()
   val scratchDirPath = Utils.createTempDir()
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     warehousePath.delete()
     metastorePath.delete()
     scratchDirPath.delete()
   }
 
-  after {
-    warehousePath.delete()
-    metastorePath.delete()
-    scratchDirPath.delete()
+  override def afterAll(): Unit = {
+    try {
+      warehousePath.delete()
+      metastorePath.delete()
+      scratchDirPath.delete()
+    } finally {
+      super.afterAll()
+    }
   }
 
   /**
@@ -79,6 +84,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
       s"""$cliScript
          |  --master local
+         |  --driver-java-options -Dderby.system.durability=test
+         |  --conf spark.ui.enabled=false
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
@@ -96,7 +103,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       buffer += s"${new Timestamp(new Date().getTime)} - $source> $line"
 
       // If we haven't found all expected answers and another expected answer comes up...
-      if (next < expectedAnswers.size && line.startsWith(expectedAnswers(next))) {
+      if (next < expectedAnswers.size && line.contains(expectedAnswers(next))) {
         next += 1
         // If all expected answers have been found...
         if (next == expectedAnswers.size) {
@@ -159,7 +166,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE hive_test;"
         -> "OK",
       "CACHE TABLE hive_test;"
-        -> "Time taken: ",
+        -> "",
       "SELECT COUNT(*) FROM hive_test;"
         -> "5",
       "DROP TABLE hive_test;"
@@ -180,7 +187,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       "CREATE TABLE hive_test(key INT, val STRING);"
         -> "OK",
       "SHOW TABLES;"
-        -> "Time taken: "
+        -> "hive_test"
     )
 
     runCliWithin(2.minute, Seq("--database", "hive_test_db", "-e", "SHOW TABLES;"))(
@@ -210,7 +217,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
         -> "OK",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
-        -> "Time taken:",
+        -> "",
       "SELECT count(key) FROM t1;"
         -> "5",
       "DROP TABLE t1;"
@@ -224,7 +231,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
       "select * from nonexistent_table;"
-        -> "Error in query: no such table nonexistent_table;"
+        -> "Error in query: Table not found: nonexistent_table;"
     )
+  }
+
+  test("SPARK-11624 Spark SQL CLI should set sessionState only once") {
+    runCliWithin(2.minute, Seq("-e", "!echo \"This is a test for Spark-11624\";"))(
+      "" -> "This is a test for Spark-11624")
   }
 }

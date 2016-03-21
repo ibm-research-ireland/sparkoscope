@@ -24,6 +24,7 @@ import java.util.concurrent.TimeoutException
 import java.util.{Map => JMap, Properties}
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 
@@ -51,7 +52,7 @@ private[kafka] class KafkaTestUtils extends Logging {
   // Zookeeper related configurations
   private val zkHost = "localhost"
   private var zkPort: Int = 0
-  private val zkConnectionTimeout = 6000
+  private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 6000
 
   private var zookeeper: EmbeddedZookeeper = _
@@ -150,7 +151,7 @@ private[kafka] class KafkaTestUtils extends Logging {
     }
   }
 
-  /** Create a Kafka topic and wait until it propagated to the whole cluster */
+  /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String): Unit = {
     AdminUtils.createTopic(zkClient, topic, 1, 1)
     // wait until metadata is propagated
@@ -159,8 +160,7 @@ private[kafka] class KafkaTestUtils extends Logging {
 
   /** Java-friendly function for sending messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
-    import scala.collection.JavaConversions._
-    sendMessages(topic, Map(messageToFreq.mapValues(_.intValue()).toSeq: _*))
+    sendMessages(topic, Map(messageToFreq.asScala.mapValues(_.intValue()).toSeq: _*))
   }
 
   /** Send the messages to the Kafka broker */

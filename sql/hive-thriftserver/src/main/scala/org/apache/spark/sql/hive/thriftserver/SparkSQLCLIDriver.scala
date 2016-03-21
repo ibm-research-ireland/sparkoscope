@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.collection.JavaConversions._
-
 import java.io._
 import java.util.{ArrayList => JArrayList, Locale}
 
 import org.apache.spark.sql.AnalysisException
+
+import scala.collection.JavaConverters._
 
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
@@ -103,9 +103,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Set all properties specified via command line.
     val conf: HiveConf = sessionState.getConf
-    sessionState.cmdProperties.entrySet().foreach { item =>
-      val key = item.getKey.asInstanceOf[String]
-      val value = item.getValue.asInstanceOf[String]
+    sessionState.cmdProperties.entrySet().asScala.foreach { item =>
+      val key = item.getKey.toString
+      val value = item.getValue.toString
       // We do not propagate metastore options to the execution copy of hive.
       if (key != "javax.jdo.option.ConnectionURL") {
         conf.set(key, value)
@@ -276,8 +276,11 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     val tokens: Array[String] = cmd_trimmed.split("\\s+")
     val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
     if (cmd_lower.equals("quit") ||
-      cmd_lower.equals("exit") ||
-      tokens(0).toLowerCase(Locale.ENGLISH).equals("source") ||
+      cmd_lower.equals("exit")) {
+      sessionState.close()
+      System.exit(0)
+    }
+    if (tokens(0).toLowerCase(Locale.ENGLISH).equals("source") ||
       cmd_trimmed.startsWith("!") ||
       tokens(0).toLowerCase.equals("list") ||
       isRemoteMode) {
@@ -290,7 +293,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     } else {
       var ret = 0
       val hconf = conf.asInstanceOf[HiveConf]
-      val proc: CommandProcessor = CommandProcessorFactory.get(Array(tokens(0)), hconf)
+      val proc: CommandProcessor = CommandProcessorFactory.get(tokens, hconf)
 
       if (proc != null) {
         // scalastyle:off println
@@ -325,15 +328,15 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
           if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
             // Print the column names.
-            Option(driver.getSchema.getFieldSchemas).map { fields =>
-              out.println(fields.map(_.getName).mkString("\t"))
+            Option(driver.getSchema.getFieldSchemas).foreach { fields =>
+              out.println(fields.asScala.map(_.getName).mkString("\t"))
             }
           }
 
           var counter = 0
           try {
             while (!out.checkError() && driver.getResults(res)) {
-              res.foreach{ l =>
+              res.asScala.foreach { l =>
                 counter += 1
                 out.println(l)
               }

@@ -24,10 +24,9 @@ import java.util.{UUID, Date}
 import java.util.concurrent._
 import java.util.concurrent.{Future => JFuture, ScheduledFuture => JScheduledFuture}
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
-import scala.util.Random
+import scala.util.{Failure, Random, Success}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -147,12 +146,10 @@ private[deploy] class Worker(
   // A thread pool for registering with masters. Because registering with a master is a blocking
   // action, this thread pool must be able to create "masterRpcAddresses.size" threads at the same
   // time so that we can register with all masters.
-  private val registerMasterThreadPool = new ThreadPoolExecutor(
-    0,
-    masterRpcAddresses.size, // Make sure we can register with all masters at the same time
-    60L, TimeUnit.SECONDS,
-    new SynchronousQueue[Runnable](),
-    ThreadUtils.namedThreadFactory("worker-register-master-threadpool"))
+  private val registerMasterThreadPool = ThreadUtils.newDaemonCachedThreadPool(
+    "worker-register-master-threadpool",
+    masterRpcAddresses.size // Make sure we can register with all masters at the same time
+  )
 
   var coresUsed = 0
   var memoryUsed = 0
@@ -214,8 +211,7 @@ private[deploy] class Worker(
             logInfo("Connecting to master " + masterAddress + "...")
             val masterEndpoint =
               rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
-            masterEndpoint.send(RegisterWorker(
-              workerId, host, port, self, cores, memory, webUi.boundPort, publicAddress))
+            registerWithMaster(masterEndpoint)
           } catch {
             case ie: InterruptedException => // Cancelled
             case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
@@ -272,8 +268,7 @@ private[deploy] class Worker(
                   logInfo("Connecting to master " + masterAddress + "...")
                   val masterEndpoint =
                     rpcEnv.setupEndpointRef(Master.SYSTEM_NAME, masterAddress, Master.ENDPOINT_NAME)
-                  masterEndpoint.send(RegisterWorker(
-                    workerId, host, port, self, cores, memory, webUi.boundPort, publicAddress))
+                  registerWithMaster(masterEndpoint)
                 } catch {
                   case ie: InterruptedException => // Cancelled
                   case NonFatal(e) => logWarning(s"Failed to connect to master $masterAddress", e)
@@ -330,7 +325,7 @@ private[deploy] class Worker(
         registrationRetryTimer = Some(forwordMessageScheduler.scheduleAtFixedRate(
           new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
-              self.send(ReregisterWithMaster)
+              Option(self).foreach(_.send(ReregisterWithMaster))
             }
           },
           INITIAL_REGISTRATION_RETRY_INTERVAL_SECONDS,
@@ -342,25 +337,54 @@ private[deploy] class Worker(
     }
   }
 
-  override def receive: PartialFunction[Any, Unit] = {
-    case RegisteredWorker(masterRef, masterWebUiUrl) =>
-      logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
-      registered = true
-      changeMaster(masterRef, masterWebUiUrl)
-      forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
-        override def run(): Unit = Utils.tryLogNonFatalError {
-          self.send(SendHeartbeat)
-        }
-      }, 0, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS)
-      if (CLEANUP_ENABLED) {
-        logInfo(s"Worker cleanup enabled; old application directories will be deleted in: $workDir")
+  private def registerWithMaster(masterEndpoint: RpcEndpointRef): Unit = {
+    masterEndpoint.ask[RegisterWorkerResponse](RegisterWorker(
+      workerId, host, port, self, cores, memory, webUi.boundPort, publicAddress))
+      .onComplete {
+        // This is a very fast action so we can use "ThreadUtils.sameThread"
+        case Success(msg) =>
+          Utils.tryLogNonFatalError {
+            handleRegisterResponse(msg)
+          }
+        case Failure(e) =>
+          logError(s"Cannot register with master: ${masterEndpoint.address}", e)
+          System.exit(1)
+      }(ThreadUtils.sameThread)
+  }
+
+  private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
+    msg match {
+      case RegisteredWorker(masterRef, masterWebUiUrl) =>
+        logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
+        registered = true
+        changeMaster(masterRef, masterWebUiUrl)
         forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
           override def run(): Unit = Utils.tryLogNonFatalError {
-            self.send(WorkDirCleanup)
+            self.send(SendHeartbeat)
           }
-        }, CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)
-      }
+        }, 0, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS)
+        if (CLEANUP_ENABLED) {
+          logInfo(
+            s"Worker cleanup enabled; old application directories will be deleted in: $workDir")
+          forwordMessageScheduler.scheduleAtFixedRate(new Runnable {
+            override def run(): Unit = Utils.tryLogNonFatalError {
+              self.send(WorkDirCleanup)
+            }
+          }, CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)
+        }
 
+      case RegisterWorkerFailed(message) =>
+        if (!registered) {
+          logError("Worker registration failed: " + message)
+          System.exit(1)
+        }
+
+      case MasterInStandby =>
+        // Ignore. Master not yet ready.
+    }
+  }
+
+  override def receive: PartialFunction[Any, Unit] = synchronized {
     case SendHeartbeat =>
       if (connected) { sendToMaster(Heartbeat(workerId, self)) }
 
@@ -399,12 +423,6 @@ private[deploy] class Worker(
       val execs = executors.values.
         map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
       masterRef.send(WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq))
-
-    case RegisterWorkerFailed(message) =>
-      if (!registered) {
-        logError("Worker registration failed: " + message)
-        System.exit(1)
-      }
 
     case ReconnectWorker(masterUrl) =>
       logInfo(s"Master with url $masterUrl requested this worker to reconnect.")
@@ -449,7 +467,7 @@ private[deploy] class Worker(
             executorDir,
             workerUri,
             conf,
-            appLocalDirs, ExecutorState.LOADING)
+            appLocalDirs, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -672,7 +690,7 @@ private[deploy] object Worker extends Logging {
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)
     val rpcEnv = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, args.cores,
-      args.memory, args.masters, args.workDir)
+      args.memory, args.masters, args.workDir, conf = conf)
     rpcEnv.awaitTermination()
   }
 

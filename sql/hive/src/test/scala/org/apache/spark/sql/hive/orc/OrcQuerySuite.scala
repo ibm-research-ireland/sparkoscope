@@ -24,6 +24,7 @@ import org.apache.hadoop.hive.ql.io.orc.CompressionKind
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 
@@ -218,7 +219,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
     }
-    catalog.unregisterTable(Seq("tmp"))
+    catalog.unregisterTable(TableIdentifier("tmp"))
   }
 
   test("overwriting") {
@@ -228,7 +229,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
     }
-    catalog.unregisterTable(Seq("tmp"))
+    catalog.unregisterTable(TableIdentifier("tmp"))
   }
 
   test("self-join") {
@@ -284,6 +285,20 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       checkAnswer(
         sql("SELECT `_1`, `_2`, SUM(`_3`) FROM t WHERE `_2` = 'run_5' GROUP BY `_1`, `_2`"),
         List(Row("same", "run_5", 100)))
+    }
+  }
+
+  test("SPARK-9170: Don't implicitly lowercase of user-provided columns") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      sqlContext.range(0, 10).select('id as "Acol").write.format("orc").save(path)
+      sqlContext.read.format("orc").load(path).schema("Acol")
+      intercept[IllegalArgumentException] {
+        sqlContext.read.format("orc").load(path).schema("acol")
+      }
+      checkAnswer(sqlContext.read.format("orc").load(path).select("acol").sort("acol"),
+        (0 until 10).map(Row(_)))
     }
   }
 

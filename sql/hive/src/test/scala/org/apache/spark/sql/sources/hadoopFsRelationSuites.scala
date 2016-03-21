@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -27,15 +27,14 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.ConvertToUnsafe
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
 
-abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
-  override def _sqlContext: SQLContext = TestHive
-  protected val sqlContext = _sqlContext
+abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import sqlContext.implicits._
 
   val dataSourceName: String
@@ -354,6 +353,19 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("saveAsTable()/load() - partitioned table - boolean type") {
+    sqlContext.range(2)
+      .select('id, ('id % 2 === 0).as("b"))
+      .write.partitionBy("b").saveAsTable("t")
+
+    withTable("t") {
+      checkAnswer(
+        sqlContext.table("t").sort('id),
+        Row(0, true) :: Row(1, false) :: Nil
+      )
+    }
+  }
+
   test("saveAsTable()/load() - partitioned table - Overwrite") {
     partitionedTestDF.write
       .format(dataSourceName)
@@ -474,6 +486,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       val df = sqlContext.read
         .format(dataSourceName)
         .option("dataSchema", dataSchema.json)
+        .option("basePath", file.getCanonicalPath)
         .load(s"${file.getCanonicalPath}/p1=*/p2=???")
 
       val expectedPaths = Set(
@@ -499,21 +512,39 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
     }
   }
 
-  // HadoopFsRelation.discoverPartitions() called by refresh(), which will ignore
-  // the given partition data type.
-  ignore("Partition column type casting") {
+  test("SPARK-9735 Partition column type casting") {
     withTempPath { file =>
-      val input = partitionedTestDF.select('a, 'b, 'p1.cast(StringType).as('ps), 'p2)
+      val df = (for {
+        i <- 1 to 3
+        p2 <- Seq("foo", "bar")
+      } yield (i, s"val_$i", 1.0d, p2, 123, 123.123f)).toDF("a", "b", "p1", "p2", "p3", "f")
 
-      input
-        .write
-        .format(dataSourceName)
-        .mode(SaveMode.Overwrite)
-        .partitionBy("ps", "p2")
-        .saveAsTable("t")
+      val input = df.select(
+        'a,
+        'b,
+        'p1.cast(StringType).as('ps1),
+        'p2,
+        'p3.cast(FloatType).as('pf1),
+        'f)
 
       withTempTable("t") {
-        checkAnswer(sqlContext.table("t"), input.collect())
+        input
+          .write
+          .format(dataSourceName)
+          .mode(SaveMode.Overwrite)
+          .partitionBy("ps1", "p2", "pf1", "f")
+          .saveAsTable("t")
+
+        input
+          .write
+          .format(dataSourceName)
+          .mode(SaveMode.Append)
+          .partitionBy("ps1", "p2", "pf1", "f")
+          .saveAsTable("t")
+
+        val realData = input.collect()
+
+        checkAnswer(sqlContext.table("t"), realData ++ realData)
       }
     }
   }
@@ -560,17 +591,17 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-8578 specified custom output committer will not be used to append data") {
-    val clonedConf = new Configuration(configuration)
+    val clonedConf = new Configuration(hadoopConfiguration)
     try {
       val df = sqlContext.range(1, 10).toDF("i")
       withTempPath { dir =>
         df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
-        configuration.set(
+        hadoopConfiguration.set(
           SQLConf.OUTPUT_COMMITTER_CLASS.key,
           classOf[AlwaysFailOutputCommitter].getName)
         // Since Parquet has its own output committer setting, also set it
         // to AlwaysFailParquetOutputCommitter at here.
-        configuration.set("spark.sql.parquet.output.committer.class",
+        hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
           classOf[AlwaysFailParquetOutputCommitter].getName)
         // Because there data already exists,
         // this append should succeed because we will use the output committer associated
@@ -589,12 +620,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         }
       }
       withTempPath { dir =>
-        configuration.set(
+        hadoopConfiguration.set(
           SQLConf.OUTPUT_COMMITTER_CLASS.key,
           classOf[AlwaysFailOutputCommitter].getName)
         // Since Parquet has its own output committer setting, also set it
         // to AlwaysFailParquetOutputCommitter at here.
-        configuration.set("spark.sql.parquet.output.committer.class",
+        hadoopConfiguration.set("spark.sql.parquet.output.committer.class",
           classOf[AlwaysFailParquetOutputCommitter].getName)
         // Because there is no existing data,
         // this append will fail because AlwaysFailOutputCommitter is used when we do append
@@ -605,13 +636,28 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       }
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
-      configuration.clear()
-      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+    }
+  }
+
+  test("SPARK-8887: Explicitly define which data types can be used as dynamic partition columns") {
+    val df = Seq(
+      (1, "v1", Array(1, 2, 3), Map("k1" -> "v1"), Tuple2(1, "4")),
+      (2, "v2", Array(4, 5, 6), Map("k2" -> "v2"), Tuple2(2, "5")),
+      (3, "v3", Array(7, 8, 9), Map("k3" -> "v3"), Tuple2(3, "6"))).toDF("a", "b", "c", "d", "e")
+    withTempDir { file =>
+      intercept[AnalysisException] {
+        df.write.format(dataSourceName).partitionBy("c", "d", "e").save(file.getCanonicalPath)
+      }
+    }
+    intercept[AnalysisException] {
+      df.write.format(dataSourceName).partitionBy("c", "d", "e").saveAsTable("t")
     }
   }
 
   test("SPARK-9899 Disable customized output committer when speculation is on") {
-    val clonedConf = new Configuration(configuration)
+    val clonedConf = new Configuration(hadoopConfiguration)
     val speculationEnabled =
       sqlContext.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
 
@@ -621,7 +667,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
         sqlContext.sparkContext.conf.set("spark.speculation", "true")
 
         // Uses a customized output committer which always fails
-        configuration.set(
+        hadoopConfiguration.set(
           SQLConf.OUTPUT_COMMITTER_CLASS.key,
           classOf[AlwaysFailOutputCommitter].getName)
 
@@ -638,9 +684,39 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
       }
     } finally {
       // Hadoop 1 doesn't have `Configuration.unset`
-      configuration.clear()
-      clonedConf.foreach(entry => configuration.set(entry.getKey, entry.getValue))
+      hadoopConfiguration.clear()
+      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
       sqlContext.sparkContext.conf.set("spark.speculation", speculationEnabled.toString)
+    }
+  }
+
+  test("HadoopFsRelation produces UnsafeRow") {
+    withTempTable("test_unsafe") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sqlContext.range(3).write.format(dataSourceName).save(path)
+        sqlContext.read
+          .format(dataSourceName)
+          .option("dataSchema", new StructType().add("id", LongType, nullable = false).json)
+          .load(path)
+          .registerTempTable("test_unsafe")
+
+        val df = sqlContext.sql(
+          """SELECT COUNT(*)
+            |FROM test_unsafe a JOIN test_unsafe b
+            |WHERE a.id = b.id
+          """.stripMargin)
+
+        val plan = df.queryExecution.executedPlan
+
+        assert(
+          plan.collect { case plan: ConvertToUnsafe => plan }.isEmpty,
+          s"""Query plan shouldn't have ${classOf[ConvertToUnsafe].getSimpleName} node(s):
+             |$plan
+           """.stripMargin)
+
+        checkAnswer(df, Row(3))
+      }
     }
   }
 }

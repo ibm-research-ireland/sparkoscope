@@ -21,7 +21,7 @@ import java.io._
 import java.net._
 import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JMap}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.existentials
 import scala.util.control.NonFatal
@@ -41,7 +41,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
 private[spark] class PythonRDD(
-    @transient parent: RDD[_],
+    parent: RDD[_],
     command: Array[Byte],
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
@@ -94,11 +94,11 @@ private[spark] class PythonRunner(
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
-    envVars += ("SPARK_LOCAL_DIRS" -> localdir) // it's also used in monitor thread
+    envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuse_worker) {
-      envVars += ("SPARK_REUSE_WORKER" -> "1")
+      envVars.put("SPARK_REUSE_WORKER", "1")
     }
-    val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
+    val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
     // Whether is the worker released into idle pool
     @volatile var released = false
 
@@ -178,7 +178,7 @@ private[spark] class PythonRunner(
               // Check whether the worker is ready to be re-used.
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
                 if (reuse_worker) {
-                  env.releasePythonWorker(pythonExec, envVars.toMap, worker)
+                  env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
                   released = true
                 }
               }
@@ -248,13 +248,13 @@ private[spark] class PythonRunner(
         // sparkFilesDir
         PythonRDD.writeUTF(SparkFiles.getRootDirectory(), dataOut)
         // Python includes (*.zip and *.egg files)
-        dataOut.writeInt(pythonIncludes.length)
-        for (include <- pythonIncludes) {
+        dataOut.writeInt(pythonIncludes.size())
+        for (include <- pythonIncludes.asScala) {
           PythonRDD.writeUTF(include, dataOut)
         }
         // Broadcast variables
         val oldBids = PythonRDD.getWorkerBroadcasts(worker)
-        val newBids = broadcastVars.map(_.id).toSet
+        val newBids = broadcastVars.asScala.map(_.id).toSet
         // number of different broadcasts
         val toRemove = oldBids.diff(newBids)
         val cnt = toRemove.size + newBids.diff(oldBids).size
@@ -264,7 +264,7 @@ private[spark] class PythonRunner(
           dataOut.writeLong(- bid - 1)  // bid >= 0
           oldBids.remove(bid)
         }
-        for (broadcast <- broadcastVars) {
+        for (broadcast <- broadcastVars.asScala) {
           if (!oldBids.contains(broadcast.id)) {
             // send new broadcast
             dataOut.writeLong(broadcast.id)
@@ -318,7 +318,7 @@ private[spark] class PythonRunner(
       if (!context.isCompleted) {
         try {
           logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
-          env.destroyPythonWorker(pythonExec, envVars.toMap, worker)
+          env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
         } catch {
           case e: Exception =>
             logError("Exception when trying to kill worker", e)
@@ -390,10 +390,10 @@ private[spark] object PythonRDD extends Logging {
     type ByteArray = Array[Byte]
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
-      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions)
+      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions.asScala)
     val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
     serveIterator(flattenedPartition.iterator,
-      s"serve RDD ${rdd.id} with partitions ${partitions.mkString(",")}")
+      s"serve RDD ${rdd.id} with partitions ${partitions.asScala.mkString(",")}")
   }
 
   /**
@@ -817,7 +817,7 @@ class BytesToString extends org.apache.spark.api.java.function.Function[Array[By
  * Internal class that acts as an `AccumulatorParam` for Python accumulators. Inside, it
  * collects a list of pickled strings that we pass to Python through a socket.
  */
-private class PythonAccumulatorParam(@transient serverHost: String, serverPort: Int)
+private class PythonAccumulatorParam(@transient private val serverHost: String, serverPort: Int)
   extends AccumulatorParam[JList[Array[Byte]]] {
 
   Utils.checkHost(serverHost, "Expected hostname")
@@ -851,7 +851,7 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
       val in = socket.getInputStream
       val out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream, bufferSize))
       out.writeInt(val2.size)
-      for (array <- val2) {
+      for (array <- val2.asScala) {
         out.writeInt(array.length)
         out.write(array)
       }
@@ -871,7 +871,8 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
  * write the data into disk after deserialization, then Python can read it from disks.
  */
 // scalastyle:off no.finalize
-private[spark] class PythonBroadcast(@transient var path: String) extends Serializable {
+private[spark] class PythonBroadcast(@transient var path: String) extends Serializable
+  with Logging {
 
   /**
    * Read data from disks, then copy it to `out`
@@ -907,7 +908,9 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     if (!path.isEmpty) {
       val file = new File(path)
       if (file.exists()) {
-        file.delete()
+        if (!file.delete()) {
+          logWarning(s"Error deleting ${file.getPath}")
+        }
       }
     }
   }

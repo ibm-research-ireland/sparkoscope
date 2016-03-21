@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
-import scala.math.max
 
 import org.json4s.JsonDSL._
 
@@ -40,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
  * Example:
  * {{{
  * import org.apache.spark.sql._
+ * import org.apache.spark.sql.types._
  *
  * val struct =
  *   StructType(
@@ -328,7 +328,8 @@ object StructType extends AbstractDataType {
   def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
 
   def apply(fields: java.util.List[StructField]): StructType = {
-    StructType(fields.toArray.asInstanceOf[Array[StructField]])
+    import scala.collection.JavaConverters._
+    StructType(fields.asScala)
   }
 
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =

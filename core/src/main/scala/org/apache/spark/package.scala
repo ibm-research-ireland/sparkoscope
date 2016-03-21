@@ -42,5 +42,6 @@ package org.apache
  */
 
 package object spark {
-  val SPARK_VERSION = "1.5.2"
+  // For package docs only
+  val SPARK_VERSION = "1.6.1"
 }

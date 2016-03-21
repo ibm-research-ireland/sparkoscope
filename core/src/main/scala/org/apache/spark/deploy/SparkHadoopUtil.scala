@@ -22,7 +22,7 @@ import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 import java.util.{Arrays, Comparator}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
@@ -71,7 +71,7 @@ class SparkHadoopUtil extends Logging {
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
-    for (token <- source.getTokens()) {
+    for (token <- source.getTokens.asScala) {
       dest.addToken(token)
     }
   }
@@ -92,10 +92,15 @@ class SparkHadoopUtil extends Logging {
       // Explicitly check for S3 environment variables
       if (System.getenv("AWS_ACCESS_KEY_ID") != null &&
           System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
-        hadoopConf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
-        hadoopConf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
-        hadoopConf.set("fs.s3.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
-        hadoopConf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
+        val keyId = System.getenv("AWS_ACCESS_KEY_ID")
+        val accessKey = System.getenv("AWS_SECRET_ACCESS_KEY")
+
+        hadoopConf.set("fs.s3.awsAccessKeyId", keyId)
+        hadoopConf.set("fs.s3n.awsAccessKeyId", keyId)
+        hadoopConf.set("fs.s3a.access.key", keyId)
+        hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey)
+        hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey)
+        hadoopConf.set("fs.s3a.secret.key", accessKey)
       }
       // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
       conf.getAll.foreach { case (key, value) =>
@@ -175,8 +180,8 @@ class SparkHadoopUtil extends Logging {
   }
 
   private def getFileSystemThreadStatistics(): Seq[AnyRef] = {
-    val stats = FileSystem.getAllStatistics()
-    stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
+    FileSystem.getAllStatistics.asScala.map(
+      Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
   }
 
   private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
@@ -192,7 +197,9 @@ class SparkHadoopUtil extends Logging {
    * while it's interface in Hadoop 2.+.
    */
   def getConfigurationFromJobContext(context: JobContext): Configuration = {
+    // scalastyle:off jobconfig
     val method = context.getClass.getMethod("getConfiguration")
+    // scalastyle:on jobconfig
     method.invoke(context).asInstanceOf[Configuration]
   }
 
@@ -204,7 +211,9 @@ class SparkHadoopUtil extends Logging {
    */
   def getTaskAttemptIDFromTaskAttemptContext(
       context: MapReduceTaskAttemptContext): MapReduceTaskAttemptID = {
+    // scalastyle:off jobconfig
     val method = context.getClass.getMethod("getTaskAttemptID")
+    // scalastyle:on jobconfig
     method.invoke(context).asInstanceOf[MapReduceTaskAttemptID]
   }
 
@@ -306,12 +315,13 @@ class SparkHadoopUtil extends Logging {
     val renewalInterval =
       sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
 
-    credentials.getAllTokens.filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
+    credentials.getAllTokens.asScala
+      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
       .map { t =>
-      val identifier = new DelegationTokenIdentifier()
-      identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-      (identifier.getIssueDate + fraction * renewalInterval).toLong - now
-    }.foldLeft(0L)(math.max)
+        val identifier = new DelegationTokenIdentifier()
+        identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
+        (identifier.getIssueDate + fraction * renewalInterval).toLong - now
+      }.foldLeft(0L)(math.max)
   }
 
 
