@@ -1,9 +1,8 @@
-package org.apache.spark.executor
+package org.apache.spark.metrics.source
 
 import java.util.Date
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
-import org.apache.spark.metrics.source.Source
 import org.hyperic.sigar.Sigar
 import org.slf4j.LoggerFactory
 
