@@ -98,9 +98,25 @@ in the online documentation for an overview on how to configure Spark.
 
 ## Installation/Configuration
 
+**Configure Sigar metrics source**
+
 In all the nodes of the cluster Hyperic Sigar library must be installed. 
 Download from [http://sourceforge.net/projects/sigar/files/sigar/1.6/hyperic-sigar-1.6.4.zip/download](http://sourceforge.net/projects/sigar/files/sigar/1.6/hyperic-sigar-1.6.4.zip/download). 
 Extract the zip in any location.
+
+In spark-envh.sh you need to add to LD_LIBRARY_PATH variable the directory of the native libraries of Sigar. For instance:
+
+```
+LD_LIBRARY_PATH=/path/to/hyperic-sigar-1.6.4/sigar-bin/lib/:$LD_LIBRARY_PATH
+```
+
+Add the source definition to *metrics.properties*
+
+```
+executor.source.jvm.class=org.apache.spark.metrics.source.SigarSource
+```
+
+**Configure hadoop**
 
 In spark-env.sh you need to set the HADOOP_CONF_DIR variable to the configuration directory of your hadoop installation. For instance:
 
@@ -108,7 +124,9 @@ In spark-env.sh you need to set the HADOOP_CONF_DIR variable to the configuratio
 HADOOP_CONF_DIR=/path/to/hadoop/etc/hadoop
 ```
 
-In order for the executor metrics to be stored in HDFS and therefore be retrieved by the UI, you need to have the following in the metrics.properties file:
+**Configure hdfs metrics sink**
+
+In order for the executor metrics to be stored in HDFS and therefore be retrieved by the UI, you need to have the following in the *metrics.properties* file:
 
 ```
 executor.sink.hdfs.class=org.apache.spark.metrics.sink.HDFSSink
@@ -126,11 +144,7 @@ executor.sink.hdfs.dir = hdfs://localhost:9000/custom-metrics
 executor.sink.hdfs.unit = seconds
 ```
 
-In spark-envh.sh you need to add to LD_LIBRARY_PATH variable the directory of the native libraries of Sigar. For instance:
-
-```
-LD_LIBRARY_PATH=/path/to/hyperic-sigar-1.6.4/sigar-bin/lib/:$LD_LIBRARY_PATH
-```
+**Event and UI configuration**
 
 Event logging must be enabled in spark-defaults.conf:
 
