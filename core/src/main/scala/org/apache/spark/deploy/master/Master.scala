@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-import java.io.{InputStream, BufferedInputStream, FileNotFoundException}
+import java.io.{InputStream, BufferedInputStream, FileNotFoundException, File, FileInputStream}
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -977,7 +977,15 @@ private[deploy] class Master(
       while (nodesList.hasNext) {
         val locatedFileStatus = nodesList.next();
         val pathOfMetric = locatedFileStatus.getPath
-        val oneNodeMetricsInput = new BufferedInputStream(fs.open(pathOfMetric))
+
+        val oneNodeMetricsInput = {
+          // Support local cluster mode
+          if (fs.getScheme() == "file") {
+            new BufferedInputStream(new FileInputStream(new File(pathOfMetric.toUri)))
+          } else {
+            new BufferedInputStream(fs.open(pathOfMetric))
+          }
+        }
         inputStreamsAndKeys += ((oneNodeMetricsInput,pathOfMetric.getName.replaceAll(".json","")))
       }
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, hdfsExecutorMetricsReplayBus, new SecurityManager(conf),
