@@ -968,7 +968,7 @@ private[deploy] class Master(
       val replayBus = new ReplayListenerBus()
       val hdfsExecutorMetricsReplayBus : Option[HDFSExecutorMetricsReplayListenerBus] = Some(new HDFSExecutorMetricsReplayListenerBus())
 
-      val customMetricsPath = conf.get("spark.sigar.dir","hdfs://localhost:9000/custom-metrics/");
+      val customMetricsPath = conf.get("spark.hdfs.metrics.dir","hdfs://localhost:9000/custom-metrics/");
       val jsonDirectory = new Path(customMetricsPath + "/" + app.id)
 
       var inputStreamsAndKeys = new ListBuffer[(InputStream,String)]
