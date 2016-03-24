@@ -22,7 +22,7 @@
 # spark.master                     spark://master:7077
 # spark.eventLog.enabled           true
 # spark.eventLog.dir               hdfs://namenode:8021/directory
-# spark.sigar.dir                  hdfs://namenode:8021/custom-metrics
+# spark.hdfs.metrics.dir           hdfs://namenode:8021/custom-metrics
 # spark.serializer                 org.apache.spark.serializer.KryoSerializer
 # spark.driver.memory              5g
 # spark.executor.extraJavaOptions  -XX:+PrintGCDetails -Dkey=value -Dnumbers="one two three"

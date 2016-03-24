@@ -158,7 +158,7 @@ spark.eventLog.dir               hdfs://127.0.0.1:9000/spark-logs
 Also in spark-defaults.conf you should specify the folder from which the UI will read the metrics:
 
 ```
-spark.sigar.dir                  hdfs://127.0.0.1:9000/custom-metrics
+spark.hdfs.metrics.dir           hdfs://127.0.0.1:9000/custom-metrics
 ```
 
 ## Notes about the metrics
@@ -186,7 +186,7 @@ Number of Kilobytes read/written from/to the disk per second
 
 # **Important**: 
 
-The folders spark.eventLog.dir, sigar.sink.hdfs.dir and spark.sigar.dir must already exist in the HDFS.
+The folders spark.eventLog.dir, executor.sink.hdfs.dir and spark.hdfs.metrics.dir must already exist in the HDFS.
 
 You should increase the limit for open files on the operating systems of the Master and the Workers.
 
