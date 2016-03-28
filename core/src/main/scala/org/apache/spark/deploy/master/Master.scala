@@ -968,26 +968,6 @@ private[deploy] class Master(
       val replayBus = new ReplayListenerBus()
       val hdfsExecutorMetricsReplayBus : Option[HDFSExecutorMetricsReplayListenerBus] = Some(new HDFSExecutorMetricsReplayListenerBus())
 
-      val customMetricsPath = conf.get("spark.hdfs.metrics.dir","hdfs://localhost:9000/custom-metrics/");
-      val jsonDirectory = new Path(customMetricsPath + "/" + app.id)
-
-      var inputStreamsAndKeys = new ListBuffer[(InputStream,String)]
-      val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + app.id), false)
-
-      while (nodesList.hasNext) {
-        val locatedFileStatus = nodesList.next();
-        val pathOfMetric = locatedFileStatus.getPath
-
-        val oneNodeMetricsInput = {
-          // Support local cluster mode
-          if (fs.getScheme() == "file") {
-            new BufferedInputStream(new FileInputStream(new File(pathOfMetric.toUri)))
-          } else {
-            new BufferedInputStream(fs.open(pathOfMetric))
-          }
-        }
-        inputStreamsAndKeys += ((oneNodeMetricsInput,pathOfMetric.getName.replaceAll(".json","")))
-      }
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, hdfsExecutorMetricsReplayBus, new SecurityManager(conf),
         appName, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       try {
@@ -995,7 +975,43 @@ private[deploy] class Master(
       } finally {
         logInput.close()
       }
-      hdfsExecutorMetricsReplayBus.foreach(_.replay(inputStreamsAndKeys, customMetricsPath + "/" + app.id, false))
+
+      // Replay the metrics if dir specified
+      if (conf.contains("spark.hdfs.metrics.dir")) {
+        val customMetricsPath = conf.get("spark.hdfs.metrics.dir")
+        val jsonDirectory = new Path(customMetricsPath + "/" + app.id)
+        var inputStreamsAndKeys = new ListBuffer[(InputStream, String)]
+        
+        // Do not fail the whole UI if metrics can not be replayed
+        try {
+
+          val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + app.id), false)
+
+          while (nodesList.hasNext) {
+            val locatedFileStatus = nodesList.next();
+            val pathOfMetric = locatedFileStatus.getPath
+
+            val oneNodeMetricsInput = {
+              // Support local cluster mode
+              if (fs.getScheme() == "file") {
+                new BufferedInputStream(new FileInputStream(new File(pathOfMetric.toUri)))
+              } else {
+                new BufferedInputStream(fs.open(pathOfMetric))
+              }
+            }
+            inputStreamsAndKeys += ((oneNodeMetricsInput, pathOfMetric.getName.replaceAll(".json", "")))
+
+            hdfsExecutorMetricsReplayBus.foreach(_.replay(inputStreamsAndKeys, customMetricsPath + "/" + app.id, false))
+          }
+        } catch {
+          case fnf: FileNotFoundException => {
+            logWarning("Metrics dir " + jsonDirectory + " not found")
+          }
+        } finally {
+          inputStreamsAndKeys.foreach(_._1.close())
+        }
+      }
+      
       Some(ui)
     }(rebuildUIContext)
 
