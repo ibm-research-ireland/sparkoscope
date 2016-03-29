@@ -203,6 +203,44 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           replayBus.addListener(appListener)
           val appAttemptInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)),
             replayBus)
+
+          // TODO refactor - this is essentially the same as the code in Master.scala 
+          // Replay the metrics if dir specified
+          if (conf.contains("spark.hdfs.metrics.dir")) {
+            val customMetricsPath = conf.get("spark.hdfs.metrics.dir")
+            val jsonDirectory = new Path(customMetricsPath + "/" + appId)
+            var inputStreamsAndKeys = new ListBuffer[(InputStream, String)]
+
+            // Do not fail the whole UI if metrics can not be replayed
+            try {
+
+              val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + appId), false)
+
+              while (nodesList.hasNext) {
+                val locatedFileStatus = nodesList.next();
+                val pathOfMetric = locatedFileStatus.getPath
+
+                val oneNodeMetricsInput = {
+                  // Support local cluster mode
+                  if (fs.getScheme() == "file") {
+                    new BufferedInputStream(new FileInputStream(new File(pathOfMetric.toUri)))
+                  } else {
+                    new BufferedInputStream(fs.open(pathOfMetric))
+                  }
+                }
+                inputStreamsAndKeys += ((oneNodeMetricsInput, pathOfMetric.getName.replaceAll(".json", "")))
+
+                hdfsExecutorMetricsBus.replay(inputStreamsAndKeys, customMetricsPath + "/" + appId, false)
+              }
+            } catch {
+              case fnf: FileNotFoundException => {
+                logWarning("Metrics dir " + jsonDirectory + " not found")
+              }
+            } finally {
+              inputStreamsAndKeys.foreach(_._1.close())
+            }
+          }
+
           appAttemptInfo.map { info =>
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
             ui.getSecurityManager.setAcls(uiAclsEnabled)
