@@ -114,6 +114,7 @@ public class HDFSReporter extends ScheduledReporter {
     private Configuration configuration;
     private FileSystem fileSystem;
     private FSDataOutputStream hadoopDataStream;
+    private FileOutputStream fileDataStream;
     private BufferedWriter writer;
     private final Clock clock;
     private long previousTimestamp = 0;
@@ -272,9 +273,10 @@ public class HDFSReporter extends ScheduledReporter {
                 writer.write(entryString);
                 writer.newLine();
                 writer.flush();
-                hadoopDataStream.flush();
-                hadoopDataStream.hsync();
-
+                if (hadoopDataStream != null) {
+                    hadoopDataStream.flush();
+                    hadoopDataStream.hsync();
+                }
                 bufferEntries.clear();
 
                 String[] keyArr = Arrays.copyOfRange(stringArr, 3, stringArr.length);
@@ -301,8 +303,15 @@ public class HDFSReporter extends ScheduledReporter {
             if (!fileSystem.exists(finalPath)) {
                 fileSystem.createNewFile(finalPath);
             }
-            hadoopDataStream = fileSystem.append(finalPath);
-            writer = new BufferedWriter(new OutputStreamWriter(hadoopDataStream));
+            
+            // Support local cluster mode
+            if (fileSystem.getScheme() == "file") {
+                fileDataStream = new FileOutputStream(new File(finalPath.toString()));
+                writer = new BufferedWriter(new OutputStreamWriter(fileDataStream));
+            } else {
+                hadoopDataStream = fileSystem.append(finalPath);
+                writer = new BufferedWriter(new OutputStreamWriter(hadoopDataStream));
+            }
         } catch (Exception e) {
             e.printStackTrace();
             LOGGER.error("Exception when trying to create writer", e);
@@ -355,8 +364,10 @@ public class HDFSReporter extends ScheduledReporter {
                 writer.write(entryString);
                 writer.newLine();
                 writer.flush();
-                hadoopDataStream.flush();
-                hadoopDataStream.hsync();
+                if (hadoopDataStream != null) {
+                    hadoopDataStream.flush();
+                    hadoopDataStream.hsync();
+                }
                 writer.close();
             }
         } catch (Exception e) {
