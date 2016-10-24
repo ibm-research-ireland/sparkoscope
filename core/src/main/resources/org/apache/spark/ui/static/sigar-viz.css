@@ -1,0 +1,61 @@
+div#sigar-network-metrics-container {
+  margin-bottom: 30px;
+  width: 98%;
+}
+
+#executor-metrics {
+  margin-bottom: 30px;
+  width: 95%;
+}
+
+svg {
+  padding-left: 2%;
+  padding-right: 2%;
+}
+
+#sigar-network-metrics-container.collapsed {
+  display: none;
+}
+
+span.expand-network {
+  cursor: pointer;
+}
+
+div#sigar-disk-metrics-container {
+  margin-bottom: 30px;
+  width: 98%;
+}
+
+#sigar-disk-metrics-container.collapsed {
+  display: none;
+}
+
+span.expand-disk {
+  cursor: pointer;
+}
+
+div#sigar-cpu-metrics-container {
+  margin-bottom: 30px;
+  width: 98%;
+}
+
+#sigar-cpu-metrics-container.collapsed {
+  display: none;
+}
+
+span.expand-cpu {
+  cursor: pointer;
+}
+
+div#sigar-ram-metrics-container {
+  margin-bottom: 30px;
+  width: 98%;
+}
+
+#sigar-ram-metrics-container.collapsed {
+  display: none;
+}
+
+span.expand-ram {
+  cursor: pointer;
+}
