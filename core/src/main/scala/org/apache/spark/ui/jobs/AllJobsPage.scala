@@ -22,12 +22,14 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.xml._
-
 import org.apache.commons.lang3.StringEscapeUtils
-
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
+import org.apache.spark.util.JsonProtocol
+import org.json4s.jackson.JsonMethods
+import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonDSL._
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
