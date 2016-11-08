@@ -17,23 +17,23 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{BufferedInputStream, FileNotFoundException, InputStream, IOException, OutputStream}
+import java.io._
 import java.util.concurrent.{ExecutorService, Executors, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
-
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.AccessControlException
-
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+
+import scala.collection.mutable.ListBuffer
 
 /**
  * A class that provides application history from event logs stored in the file system.
@@ -142,10 +142,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       applications.get(appId).flatMap { appInfo =>
         appInfo.attempts.find(_.attemptId == attemptId).flatMap { attempt =>
           val replayBus = new ReplayListenerBus()
+          val hdfsExecutorMetricsBus = new HDFSExecutorMetricsReplayListenerBus()
           val ui = {
             val conf = this.conf.clone()
             val appSecManager = new SecurityManager(conf)
-            SparkUI.createHistoryUI(conf, replayBus, appSecManager, appId,
+            SparkUI.createHistoryUI(conf, replayBus, Some(hdfsExecutorMetricsBus), appSecManager, appId,
               HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
@@ -153,6 +154,40 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           replayBus.addListener(appListener)
           val appInfo = replay(fs.getFileStatus(new Path(logDir, attempt.logPath)), replayBus)
           appInfo.map { info =>
+            if (conf.contains("spark.hdfs.metrics.dir")) {
+              val customMetricsPath = conf.get("spark.hdfs.metrics.dir")
+              val jsonDirectory = new Path(customMetricsPath + "/" + appId)
+              var inputStreamsAndKeys = new ListBuffer[(InputStream, String)]
+
+              // Do not fail the whole UI if metrics can not be replayed
+              try {
+
+                val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + appId), false)
+
+                while (nodesList.hasNext) {
+                  val locatedFileStatus = nodesList.next();
+                  val pathOfMetric = locatedFileStatus.getPath
+
+                  val oneNodeMetricsInput = {
+                    // Support local cluster mode
+                    if (fs.getScheme() == "file") {
+                      new BufferedInputStream(new FileInputStream(new File(pathOfMetric.toUri)))
+                    } else {
+                      new BufferedInputStream(fs.open(pathOfMetric))
+                    }
+                  }
+                  inputStreamsAndKeys += ((oneNodeMetricsInput, pathOfMetric.getName.replaceAll(".json", "")))
+
+                  hdfsExecutorMetricsBus.replay(inputStreamsAndKeys, customMetricsPath + "/" + appId, false)
+                }
+              } catch {
+                case fnf: FileNotFoundException => {
+                  logWarning("Metrics dir " + jsonDirectory + " not found")
+                }
+              } finally {
+                inputStreamsAndKeys.foreach(_._1.close())
+              }
+            }
             ui.setAppName(s"${info.name} ($appId)")
 
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)

@@ -17,22 +17,19 @@
 
 package org.apache.spark.deploy.master
 
-import java.io.FileNotFoundException
+import java.io._
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer}
 import scala.language.postfixOps
 import scala.util.Random
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
-  ExecutorState, SparkHadoopUtil}
+import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -40,17 +37,17 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
+import org.apache.spark.scheduler.{EventLoggingListener, HDFSExecutorMetricsReplayListenerBus, ReplayListenerBus}
 import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ThreadUtils, SignalLogger, Utils}
+import org.apache.spark.util.{SignalLogger, ThreadUtils, Utils}
 
 private[deploy] class Master(
-    override val rpcEnv: RpcEnv,
-    address: RpcAddress,
-    webUiPort: Int,
-    val securityMgr: SecurityManager,
-    val conf: SparkConf)
+                              override val rpcEnv: RpcEnv,
+                              address: RpcAddress,
+                              webUiPort: Int,
+                              val securityMgr: SecurityManager,
+                              val conf: SparkConf)
   extends ThreadSafeRpcEndpoint with Logging with LeaderElectable {
 
   private val forwardMessageThread =
@@ -234,7 +231,7 @@ private[deploy] class Master(
     }
 
     case RegisterWorker(
-        id, workerHost, workerPort, workerRef, cores, memory, workerUiPort, publicAddress) => {
+    id, workerHost, workerPort, workerRef, cores, memory, workerUiPort, publicAddress) => {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -279,7 +276,9 @@ private[deploy] class Master(
         case Some(exec) => {
           val appInfo = idToApp(appId)
           exec.state = state
-          if (state == ExecutorState.RUNNING) { appInfo.resetRetryCount() }
+          if (state == ExecutorState.RUNNING) {
+            appInfo.resetRetryCount()
+          }
           exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
@@ -346,7 +345,9 @@ private[deploy] class Master(
           logWarning("Master change ack from unknown app: " + appId)
       }
 
-      if (canCompleteRecovery) { completeRecovery() }
+      if (canCompleteRecovery) {
+        completeRecovery()
+      }
     }
 
     case WorkerSchedulerStateResponse(workerId, executors, driverIds) => {
@@ -374,7 +375,9 @@ private[deploy] class Master(
           logWarning("Scheduler state from unknown worker: " + workerId)
       }
 
-      if (canCompleteRecovery) { completeRecovery() }
+      if (canCompleteRecovery) {
+        completeRecovery()
+      }
     }
 
     case UnregisterApplication(applicationId) =>
@@ -482,7 +485,9 @@ private[deploy] class Master(
     logInfo(s"$address got disassociated, removing it.")
     addressToWorker.get(address).foreach(removeWorker)
     addressToApp.get(address).foreach(finishApplication)
-    if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
+    if (state == RecoveryState.RECOVERING && canCompleteRecovery) {
+      completeRecovery()
+    }
   }
 
   private def canCompleteRecovery =
@@ -490,7 +495,7 @@ private[deploy] class Master(
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
-      storedWorkers: Seq[WorkerInfo]) {
+                            storedWorkers: Seq[WorkerInfo]) {
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
       try {
@@ -522,7 +527,9 @@ private[deploy] class Master(
 
   private def completeRecovery() {
     // Ensure "only-once" recovery semantics using a short synchronization period.
-    if (state != RecoveryState.RECOVERING) { return }
+    if (state != RecoveryState.RECOVERING) {
+      return
+    }
     state = RecoveryState.COMPLETING_RECOVERY
 
     // Kill off any workers and apps that didn't respond to us.
@@ -547,29 +554,29 @@ private[deploy] class Master(
   }
 
   /**
-   * Schedule executors to be launched on the workers.
-   * Returns an array containing number of cores assigned to each worker.
-   *
-   * There are two modes of launching executors. The first attempts to spread out an application's
-   * executors on as many workers as possible, while the second does the opposite (i.e. launch them
-   * on as few workers as possible). The former is usually better for data locality purposes and is
-   * the default.
-   *
-   * The number of cores assigned to each executor is configurable. When this is explicitly set,
-   * multiple executors from the same application may be launched on the same worker if the worker
-   * has enough cores and memory. Otherwise, each executor grabs all the cores available on the
-   * worker by default, in which case only one executor may be launched on each worker.
-   *
-   * It is important to allocate coresPerExecutor on each worker at a time (instead of 1 core
-   * at a time). Consider the following example: cluster has 4 workers with 16 cores each.
-   * User requests 3 executors (spark.cores.max = 48, spark.executor.cores = 16). If 1 core is
-   * allocated at a time, 12 cores from each worker would be assigned to each executor.
-   * Since 12 < 16, no executors would launch [SPARK-8881].
-   */
+    * Schedule executors to be launched on the workers.
+    * Returns an array containing number of cores assigned to each worker.
+    *
+    * There are two modes of launching executors. The first attempts to spread out an application's
+    * executors on as many workers as possible, while the second does the opposite (i.e. launch them
+    * on as few workers as possible). The former is usually better for data locality purposes and is
+    * the default.
+    *
+    * The number of cores assigned to each executor is configurable. When this is explicitly set,
+    * multiple executors from the same application may be launched on the same worker if the worker
+    * has enough cores and memory. Otherwise, each executor grabs all the cores available on the
+    * worker by default, in which case only one executor may be launched on each worker.
+    *
+    * It is important to allocate coresPerExecutor on each worker at a time (instead of 1 core
+    * at a time). Consider the following example: cluster has 4 workers with 16 cores each.
+    * User requests 3 executors (spark.cores.max = 48, spark.executor.cores = 16). If 1 core is
+    * allocated at a time, 12 cores from each worker would be assigned to each executor.
+    * Since 12 < 16, no executors would launch [SPARK-8881].
+    */
   private def scheduleExecutorsOnWorkers(
-      app: ApplicationInfo,
-      usableWorkers: Array[WorkerInfo],
-      spreadOutApps: Boolean): Array[Int] = {
+                                          app: ApplicationInfo,
+                                          usableWorkers: Array[WorkerInfo],
+                                          spreadOutApps: Boolean): Array[Int] = {
     val coresPerExecutor = app.desc.coresPerExecutor
     val minCoresPerExecutor = coresPerExecutor.getOrElse(1)
     val oneExecutorPerWorker = coresPerExecutor.isEmpty
@@ -632,8 +639,8 @@ private[deploy] class Master(
   }
 
   /**
-   * Schedule and launch executors on workers
-   */
+    * Schedule and launch executors on workers
+    */
   private def startExecutorsOnWorkers(): Unit = {
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
@@ -655,21 +662,24 @@ private[deploy] class Master(
   }
 
   /**
-   * Allocate a worker's resources to one or more executors.
-   * @param app the info of the application which the executors belong to
-   * @param assignedCores number of cores on this worker for this application
-   * @param coresPerExecutor number of cores per executor
-   * @param worker the worker info
-   */
+    * Allocate a worker's resources to one or more executors.
+    *
+    * @param app              the info of the application which the executors belong to
+    * @param assignedCores    number of cores on this worker for this application
+    * @param coresPerExecutor number of cores per executor
+    * @param worker           the worker info
+    */
   private def allocateWorkerResourceToExecutors(
-      app: ApplicationInfo,
-      assignedCores: Int,
-      coresPerExecutor: Option[Int],
-      worker: WorkerInfo): Unit = {
+                                                 app: ApplicationInfo,
+                                                 assignedCores: Int,
+                                                 coresPerExecutor: Option[Int],
+                                                 worker: WorkerInfo): Unit = {
     // If the number of cores per executor is specified, we divide the cores assigned
     // to this worker evenly among the executors with no remainder.
     // Otherwise, we launch a single executor that grabs all the assignedCores on this worker.
-    val numExecutors = coresPerExecutor.map { assignedCores / _ }.getOrElse(1)
+    val numExecutors = coresPerExecutor.map {
+      assignedCores / _
+    }.getOrElse(1)
     val coresToAssign = coresPerExecutor.getOrElse(assignedCores)
     for (i <- 1 to numExecutors) {
       val exec = app.addExecutor(worker, coresToAssign)
@@ -679,11 +689,13 @@ private[deploy] class Master(
   }
 
   /**
-   * Schedule the currently available resources among waiting apps. This method will be called
-   * every time a new app joins or resource availability changes.
-   */
+    * Schedule the currently available resources among waiting apps. This method will be called
+    * every time a new app joins or resource availability changes.
+    */
   private def schedule(): Unit = {
-    if (state != RecoveryState.ALIVE) { return }
+    if (state != RecoveryState.ALIVE) {
+      return
+    }
     // Drivers take strict precedence over executors
     val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
     for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
@@ -765,7 +777,7 @@ private[deploy] class Master(
   }
 
   private def createApplication(desc: ApplicationDescription, driver: RpcEndpointRef):
-      ApplicationInfo = {
+  ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
     new ApplicationInfo(now, newApplicationId(date), desc, date, driver, defaultCores)
@@ -799,7 +811,7 @@ private[deploy] class Master(
       addressToApp -= app.driver.address
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
-        completedApps.take(toRemove).foreach( a => {
+        completedApps.take(toRemove).foreach(a => {
           appIdToUI.remove(a.id).foreach { ui => webUi.detachSparkUI(ui) }
           applicationMetricsSystem.removeSource(a.appSource)
         })
@@ -829,14 +841,14 @@ private[deploy] class Master(
   }
 
   /**
-   * Handle a request to set the target number of executors for this application.
-   *
-   * If the executor limit is adjusted upwards, new executors will be launched provided
-   * that there are workers with sufficient resources. If it is adjusted downwards, however,
-   * we do not kill existing executors until we explicitly receive a kill request.
-   *
-   * @return whether the application has previously registered with this Master.
-   */
+    * Handle a request to set the target number of executors for this application.
+    *
+    * If the executor limit is adjusted upwards, new executors will be launched provided
+    * that there are workers with sufficient resources. If it is adjusted downwards, however,
+    * we do not kill existing executors until we explicitly receive a kill request.
+    *
+    * @return whether the application has previously registered with this Master.
+    */
   private def handleRequestExecutors(appId: String, requestedTotal: Int): Boolean = {
     idToApp.get(appId) match {
       case Some(appInfo) =>
@@ -851,14 +863,14 @@ private[deploy] class Master(
   }
 
   /**
-   * Handle a kill request from the given application.
-   *
-   * This method assumes the executor limit has already been adjusted downwards through
-   * a separate [[RequestExecutors]] message, such that we do not launch new executors
-   * immediately after the old ones are removed.
-   *
-   * @return whether the application has previously registered with this Master.
-   */
+    * Handle a kill request from the given application.
+    *
+    * This method assumes the executor limit has already been adjusted downwards through
+    * a separate [[RequestExecutors]] message, such that we do not launch new executors
+    * immediately after the old ones are removed.
+    *
+    * @return whether the application has previously registered with this Master.
+    */
   private def handleKillExecutors(appId: String, executorIds: Seq[Int]): Boolean = {
     idToApp.get(appId) match {
       case Some(appInfo) =>
@@ -882,12 +894,12 @@ private[deploy] class Master(
   }
 
   /**
-   * Cast the given executor IDs to integers and filter out the ones that fail.
-   *
-   * All executors IDs should be integers since we launched these executors. However,
-   * the kill interface on the driver side accepts arbitrary strings, so we need to
-   * handle non-integer executor IDs just to be safe.
-   */
+    * Cast the given executor IDs to integers and filter out the ones that fail.
+    *
+    * All executors IDs should be integers since we launched these executors. However,
+    * the kill interface on the driver side accepts arbitrary strings, so we need to
+    * handle non-integer executor IDs just to be safe.
+    */
   private def formatExecutorIds(executorIds: Seq[String]): Seq[Int] = {
     executorIds.flatMap { executorId =>
       try {
@@ -901,8 +913,8 @@ private[deploy] class Master(
   }
 
   /**
-   * Ask the worker on which the specified executor is launched to kill the executor.
-   */
+    * Ask the worker on which the specified executor is launched to kill the executor.
+    */
   private def killExecutor(exec: ExecutorDesc): Unit = {
     exec.worker.removeExecutor(exec)
     exec.worker.endpoint.send(KillExecutor(masterUrl, exec.application.id, exec.id))
@@ -910,9 +922,9 @@ private[deploy] class Master(
   }
 
   /**
-   * Rebuild a new SparkUI from the given application's event logs.
-   * Return the UI if successful, else None
-   */
+    * Rebuild a new SparkUI from the given application's event logs.
+    * Return the UI if successful, else None
+    */
   private[master] def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
@@ -925,10 +937,10 @@ private[deploy] class Master(
         }
 
       val eventLogFilePrefix = EventLoggingListener.getLogPath(
-          eventLogDir, app.id, app.desc.eventLogCodec)
+        eventLogDir, app.id, app.desc.eventLogCodec)
       val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
       val inProgressExists = fs.exists(new Path(eventLogFilePrefix +
-          EventLoggingListener.IN_PROGRESS))
+        EventLoggingListener.IN_PROGRESS))
 
       if (inProgressExists) {
         // Event logging is enabled for this application, but the application is still in progress
@@ -943,13 +955,49 @@ private[deploy] class Master(
 
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
-      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
-        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
+      val hdfsExecutorMetricsReplayBus: Option[HDFSExecutorMetricsReplayListenerBus] =
+        Some(new HDFSExecutorMetricsReplayListenerBus())
+      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, hdfsExecutorMetricsReplayBus,
+        new SecurityManager(conf), appName, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)
       } finally {
         logInput.close()
+      }
+      if (conf.contains("spark.hdfs.metrics.dir")) {
+        val customMetricsPath = conf.get("spark.hdfs.metrics.dir")
+        val jsonDirectory = new Path(customMetricsPath + "/" + app.id)
+        var inputStreamsAndKeys = new ListBuffer[(InputStream, String)]
+
+        // Do not fail the whole UI if metrics can not be replayed
+        try {
+
+          val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + app.id), false)
+
+          while (nodesList.hasNext) {
+            val locatedFileStatus = nodesList.next();
+            val pathOfMetric = locatedFileStatus.getPath
+
+            val oneNodeMetricsInput = {
+              // Support local cluster mode
+              if (fs.getScheme() == "file") {
+                new BufferedInputStream(new FileInputStream(new File(pathOfMetric.toUri)))
+              } else {
+                new BufferedInputStream(fs.open(pathOfMetric))
+              }
+            }
+            inputStreamsAndKeys += ((oneNodeMetricsInput, pathOfMetric.getName.replaceAll(".json", "")))
+
+            hdfsExecutorMetricsReplayBus.foreach(_.replay(inputStreamsAndKeys, customMetricsPath + "/" + app.id, false))
+          }
+        } catch {
+          case fnf: FileNotFoundException => {
+            logWarning("Metrics dir " + jsonDirectory + " not found")
+          }
+        } finally {
+          inputStreamsAndKeys.foreach(_._1.close())
+        }
       }
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
@@ -1024,9 +1072,9 @@ private[deploy] class Master(
   }
 
   private def removeDriver(
-      driverId: String,
-      finalState: DriverState,
-      exception: Option[Exception]) {
+                            driverId: String,
+                            finalState: DriverState,
+                            exception: Option[Exception]) {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")
@@ -1060,16 +1108,16 @@ private[deploy] object Master extends Logging {
   }
 
   /**
-   * Start the Master and return a three tuple of:
-   *   (1) The Master RpcEnv
-   *   (2) The web UI bound port
-   *   (3) The REST server bound port, if any
-   */
+    * Start the Master and return a three tuple of:
+    * (1) The Master RpcEnv
+    * (2) The web UI bound port
+    * (3) The REST server bound port, if any
+    */
   def startRpcEnvAndEndpoint(
-      host: String,
-      port: Int,
-      webUiPort: Int,
-      conf: SparkConf): (RpcEnv, Int, Option[Int]) = {
+                              host: String,
+                              port: Int,
+                              webUiPort: Int,
+                              conf: SparkConf): (RpcEnv, Int, Option[Int]) = {
     val securityMgr = new SecurityManager(conf)
     val rpcEnv = RpcEnv.create(SYSTEM_NAME, host, port, conf, securityMgr)
     val masterEndpoint = rpcEnv.setupEndpoint(ENDPOINT_NAME,
