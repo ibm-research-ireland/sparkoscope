@@ -116,6 +116,9 @@ case class SparkListenerApplicationStart(appName: String, appId: Option[String],
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
+@DeveloperApi
+case class HDFSExecutorMetrics(values: Map[String,Any], host: String, timestamp: Long) extends SparkListenerEvent
+
 /**
  * An internal class that describes the metadata of an event log.
  * This event is not meant to be posted to listeners downstream.
@@ -210,6 +213,11 @@ trait SparkListener {
    * Called when the driver removes an executor.
    */
   def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) { }
+
+  /**
+    * Called when we have a new entry for the Executor Metrics
+    */
+  def onHDFSExecutorMetrics(hdfsExecutorMetrics: HDFSExecutorMetrics) {}
 }
 
 /**

@@ -17,27 +17,24 @@
 
 package org.apache.spark.deploy.master
 
-import java.io.FileNotFoundException
+import java.io._
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
-
 import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.Serialization
 import akka.serialization.SerializationExtension
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
-  ExecutorState, SparkHadoopUtil}
+import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState, SparkHadoopUtil}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.master.DriverState.DriverState
@@ -45,9 +42,9 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.deploy.rest.StandaloneRestServer
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
+import org.apache.spark.scheduler.{EventLoggingListener, HDFSExecutorMetricsReplayListenerBus, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ActorLogReceive, AkkaUtils, RpcUtils, SignalLogger, Utils}
+import org.apache.spark.util._
 
 private[master] class Master(
     host: String,
@@ -409,7 +406,9 @@ private[master] class Master(
           logWarning("Master change ack from unknown app: " + appId)
       }
 
-      if (canCompleteRecovery) { completeRecovery() }
+      if (canCompleteRecovery) {
+        completeRecovery()
+      }
     }
 
     case WorkerSchedulerStateResponse(workerId, executors, driverIds) => {
@@ -437,7 +436,9 @@ private[master] class Master(
           logWarning("Scheduler state from unknown worker: " + workerId)
       }
 
-      if (canCompleteRecovery) { completeRecovery() }
+      if (canCompleteRecovery) {
+        completeRecovery()
+      }
     }
 
     case UnregisterApplication(applicationId) =>
@@ -473,7 +474,7 @@ private[master] class Master(
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
   private def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
-      storedWorkers: Seq[WorkerInfo]) {
+                            storedWorkers: Seq[WorkerInfo]) {
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
       try {
@@ -602,11 +603,13 @@ private[master] class Master(
   }
 
   /**
-   * Schedule the currently available resources among waiting apps. This method will be called
-   * every time a new app joins or resource availability changes.
-   */
+    * Schedule the currently available resources among waiting apps. This method will be called
+    * every time a new app joins or resource availability changes.
+    */
   private def schedule(): Unit = {
-    if (state != RecoveryState.ALIVE) { return }
+    if (state != RecoveryState.ALIVE) {
+      return
+    }
     // Drivers take strict precedence over executors
     val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
     for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
@@ -753,9 +756,9 @@ private[master] class Master(
   }
 
   /**
-   * Rebuild a new SparkUI from the given application's event logs.
-   * Return the UI if successful, else None
-   */
+    * Rebuild a new SparkUI from the given application's event logs.
+    * Return the UI if successful, else None
+    */
   private[master] def rebuildSparkUI(app: ApplicationInfo): Option[SparkUI] = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
@@ -786,13 +789,49 @@ private[master] class Master(
 
       val logInput = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
-      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
-        appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
+      val hdfsExecutorMetricsReplayBus: Option[HDFSExecutorMetricsReplayListenerBus] =
+        Some(new HDFSExecutorMetricsReplayListenerBus())
+      val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, hdfsExecutorMetricsReplayBus,
+        new SecurityManager(conf), appName + status, HistoryServer.UI_PATH_PREFIX + s"/${app.id}", app.startTime)
       val maybeTruncated = eventLogFile.endsWith(EventLoggingListener.IN_PROGRESS)
       try {
         replayBus.replay(logInput, eventLogFile, maybeTruncated)
       } finally {
         logInput.close()
+      }
+      if (conf.contains("spark.hdfs.metrics.dir")) {
+        val customMetricsPath = conf.get("spark.hdfs.metrics.dir")
+        val jsonDirectory = new Path(customMetricsPath + "/" + app.id)
+        var inputStreamsAndKeys = new ListBuffer[(InputStream, String)]
+
+        // Do not fail the whole UI if metrics can not be replayed
+        try {
+
+          val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + app.id), false)
+
+          while (nodesList.hasNext) {
+            val locatedFileStatus = nodesList.next();
+            val pathOfMetric = locatedFileStatus.getPath
+
+            val oneNodeMetricsInput = {
+              // Support local cluster mode
+              if (fs.getScheme() == "file") {
+                new BufferedInputStream(new FileInputStream(new File(pathOfMetric.toUri)))
+              } else {
+                new BufferedInputStream(fs.open(pathOfMetric))
+              }
+            }
+            inputStreamsAndKeys += ((oneNodeMetricsInput, pathOfMetric.getName.replaceAll(".json", "")))
+
+            hdfsExecutorMetricsReplayBus.foreach(_.replay(inputStreamsAndKeys, customMetricsPath + "/" + app.id, false))
+          }
+        } catch {
+          case fnf: FileNotFoundException => {
+            logWarning("Metrics dir " + jsonDirectory + " not found")
+          }
+        } finally {
+          inputStreamsAndKeys.foreach(_._1.close())
+        }
       }
       appIdToUI(app.id) = ui
       webUi.attachSparkUI(ui)
@@ -867,9 +906,9 @@ private[master] class Master(
   }
 
   private def removeDriver(
-      driverId: String,
-      finalState: DriverState,
-      exception: Option[Exception]) {
+                            driverId: String,
+                            finalState: DriverState,
+                            exception: Option[Exception]) {
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")

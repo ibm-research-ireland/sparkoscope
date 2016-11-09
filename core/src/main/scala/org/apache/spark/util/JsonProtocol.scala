@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.util.{Properties, UUID}
 
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.json4s.jackson.Serialization
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
@@ -90,6 +91,8 @@ private[spark] object JsonProtocol {
         executorAddedToJson(executorAdded)
       case executorRemoved: SparkListenerExecutorRemoved =>
         executorRemovedToJson(executorRemoved)
+      case hdfsExecutorMetrics: HDFSExecutorMetrics =>
+        hdfsExecutorMetricsToJson(hdfsExecutorMetrics)
       case logStart: SparkListenerLogStart =>
         logStartToJson(logStart)
       // These aren't used, but keeps compiler happy
@@ -221,6 +224,12 @@ private[spark] object JsonProtocol {
   def logStartToJson(logStart: SparkListenerLogStart): JValue = {
     ("Event" -> Utils.getFormattedClassName(logStart)) ~
     ("Spark Version" -> SPARK_VERSION)
+  }
+
+  def hdfsExecutorMetricsToJson(hDFSExecutorMetrics: HDFSExecutorMetrics): JValue = {
+    ("timestamp" -> hDFSExecutorMetrics.timestamp) ~
+      ("values" -> Serialization.write(hDFSExecutorMetrics.values)) ~
+      ("host" -> hDFSExecutorMetrics.host)
   }
 
   /** ------------------------------------------------------------------- *
