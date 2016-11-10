@@ -14,6 +14,7 @@ import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import org.apache.spark.util.Utils;
@@ -114,7 +115,6 @@ public class HDFSReporter extends ScheduledReporter {
     private Configuration configuration;
     private FileSystem fileSystem;
     private FSDataOutputStream hadoopDataStream;
-    private FileOutputStream fileDataStream;
     private BufferedWriter writer;
     private final Clock clock;
     private long previousTimestamp = 0;
@@ -294,20 +294,32 @@ public class HDFSReporter extends ScheduledReporter {
 
     private boolean createWriter(String appId,String executorId) {
         System.out.println("Creating writer for "+appId+" and "+executorId);
-        Path appFolder = new Path(directory + File.separator + appId);
+        Path appFolder = null;
+        try {
+            appFolder = new Path(new URI(directory + File.separator + appId));
+        } catch (URISyntaxException e) {
+            e.printStackTrace();
+            LOGGER.error("Exception when creating the folder",e);
+            return false;
+        }
         try {
             if (!fileSystem.exists(appFolder)) {
                 fileSystem.mkdirs(appFolder);
             }
-            Path finalPath = new Path(directory + File.separator + appId + File.separator + localhost +"_"+executorId+".json");
+            String pathString = directory + File.separator + appId + File.separator + localhost +"_"+executorId+".json";
+            Path finalPath = new Path(pathString);
             if (!fileSystem.exists(finalPath)) {
                 fileSystem.createNewFile(finalPath);
             }
 
             // Support local cluster mode
             if (fileSystem.getScheme() == "file") {
-                fileDataStream = new FileOutputStream(new File(finalPath.toString()));
-                writer = new BufferedWriter(new OutputStreamWriter(fileDataStream));
+                File outputFile = new File(pathString);
+                if(!outputFile.exists()) {
+                    outputFile.getParentFile().mkdirs();
+                    outputFile.createNewFile();
+                }
+                writer = new BufferedWriter(new FileWriter(Paths.get(new URI(pathString)).toFile()));
             } else {
                 hadoopDataStream = fileSystem.append(finalPath);
                 writer = new BufferedWriter(new OutputStreamWriter(hadoopDataStream));
