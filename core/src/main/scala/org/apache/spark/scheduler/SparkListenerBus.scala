@@ -63,6 +63,8 @@ private[spark] trait SparkListenerBus
         listener.onExecutorRemoved(executorRemoved)
       case blockUpdated: SparkListenerBlockUpdated =>
         listener.onBlockUpdated(blockUpdated)
+      case hdfsExecutorMetrics: HDFSExecutorMetrics =>
+        listener.onHDFSExecutorMetrics(hdfsExecutorMetrics)
       case logStart: SparkListenerLogStart => // ignore event log metadata
       case _ => listener.onOtherEvent(event)
     }

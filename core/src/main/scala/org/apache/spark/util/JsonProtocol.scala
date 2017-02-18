@@ -28,6 +28,7 @@ import org.json4s.DefaultFormats
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
+import org.json4s.jackson.Serialization
 
 import org.apache.spark._
 import org.apache.spark.executor._
@@ -98,6 +99,8 @@ private[spark] object JsonProtocol {
         logStartToJson(logStart)
       case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
         executorMetricsUpdateToJson(metricsUpdate)
+      case hdfsExecutorMetrics: HDFSExecutorMetrics =>
+        hdfsExecutorMetricsToJson(hdfsExecutorMetrics)
       case blockUpdated: SparkListenerBlockUpdated =>
         throw new MatchError(blockUpdated)  // TODO(ekl) implement this
       case _ => parse(mapper.writeValueAsString(event))
@@ -242,6 +245,12 @@ private[spark] object JsonProtocol {
       ("Stage Attempt ID" -> stageAttemptId) ~
       ("Accumulator Updates" -> JArray(updates.map(accumulableInfoToJson).toList))
     })
+  }
+
+  def hdfsExecutorMetricsToJson(hDFSExecutorMetrics: HDFSExecutorMetrics): JValue = {
+    ("timestamp" -> hDFSExecutorMetrics.timestamp ) ~
+      ("values" -> Serialization.write(hDFSExecutorMetrics.values) ) ~
+      ("host" -> hDFSExecutorMetrics.host)
   }
 
   /** ------------------------------------------------------------------- *

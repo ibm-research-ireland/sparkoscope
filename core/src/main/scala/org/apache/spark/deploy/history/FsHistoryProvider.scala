@@ -17,12 +17,13 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{FileNotFoundException, IOException, OutputStream}
+import java.io._
 import java.util.UUID
 import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 import scala.xml.Node
 
 import com.google.common.io.ByteStreams
@@ -237,17 +238,57 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       applications.get(appId).flatMap { appInfo =>
         appInfo.attempts.find(_.attemptId == attemptId).flatMap { attempt =>
           val replayBus = new ReplayListenerBus()
+          val hdfsExecutorMetricsBus = new HDFSExecutorMetricsReplayListenerBus()
           val ui = {
             val conf = this.conf.clone()
             val appSecManager = new SecurityManager(conf)
-            SparkUI.createHistoryUI(conf, replayBus, appSecManager, appInfo.name,
-              HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
+            SparkUI.createHistoryUI(conf, replayBus, Some(hdfsExecutorMetricsBus), appSecManager,
+              appInfo.name, HistoryServer.getAttemptURI(appId, attempt.attemptId),
+              attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
 
           val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
 
           val appListener = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
+
+          logInfo("Checking hdfs.metrics.dir");
+
+          if (conf.contains("spark.hdfs.metrics.dir")) {
+            val customMetricsPath = conf.get("spark.hdfs.metrics.dir")
+            val jsonDirectory = new Path(customMetricsPath + "/" + appId)
+            var inputStreamsAndKeys = new ListBuffer[(InputStream, String)]
+
+            // Do not fail the whole UI if metrics can not be replayed
+            try {
+
+              val nodesList = fs.listFiles(new Path(customMetricsPath + "/" + appId), false)
+
+              while (nodesList.hasNext) {
+                val locatedFileStatus = nodesList.next();
+                val pathOfMetric = locatedFileStatus.getPath
+
+                val oneNodeMetricsInput = {
+                  // Support local cluster mode
+                  if (fs.getScheme() == "file") {
+                    new BufferedInputStream(new FileInputStream(new File(pathOfMetric.toUri)))
+                  } else {
+                    new BufferedInputStream(fs.open(pathOfMetric))
+                  }
+                }
+                inputStreamsAndKeys +=
+                  ((oneNodeMetricsInput, pathOfMetric.getName.replaceAll(".json", "")))
+
+                hdfsExecutorMetricsBus
+                  .replay(inputStreamsAndKeys, customMetricsPath + "/" + appId, false)
+              }
+            } catch {
+              case fnf: FileNotFoundException =>
+                logWarning("Metrics dir " + jsonDirectory + " not found")
+            } finally {
+              inputStreamsAndKeys.foreach(_._1.close())
+            }
+          }
 
           if (appListener.appId.isDefined) {
             val uiAclsEnabled = conf.getBoolean("spark.history.ui.acls.enable", false)
@@ -262,7 +303,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           } else {
             None
           }
-
         }
       }
     } catch {
