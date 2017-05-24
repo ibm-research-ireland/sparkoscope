@@ -18,11 +18,16 @@
 package org.apache.spark.deploy.master
 
 import java.text.SimpleDateFormat
-import java.util.{Date, Locale}
+import java.util.{Arrays, Date, Locale}
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
+
+import io.moquette.interception.AbstractInterceptHandler
+import io.moquette.interception.messages.InterceptPublishMessage
+import io.moquette.server.Server
+import io.moquette.server.config.ClasspathConfig
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
@@ -178,6 +183,20 @@ private[deploy] class Master(
     }
     persistenceEngine = persistenceEngine_
     leaderElectionAgent = leaderElectionAgent_
+
+    class PublisherListener extends AbstractInterceptHandler {
+      override def onPublish(message: InterceptPublishMessage): Unit = {
+        logInfo("moquette mqtt broker message intercepted, topic: " +
+          message.getTopicName + ", content: " + new String(message.getPayload.array))
+      }
+    }
+
+    ThreadUtils.runInNewThread("moquette-server") {
+      val classPathConfig = new ClasspathConfig
+      val mqttBroker: Server = new Server
+      val userHandlers = Arrays.asList(new PublisherListener)
+      mqttBroker.startServer(classPathConfig, userHandlers)
+    }
   }
 
   override def onStop() {
