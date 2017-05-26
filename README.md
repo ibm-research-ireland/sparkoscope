@@ -144,6 +144,29 @@ executor.sink.hdfs.dir = hdfs://localhost:9000/custom-metrics
 executor.sink.hdfs.unit = seconds
 ```
 
+**Realtime Plots configuration**
+
+The same metrics that are exposed in the history server, now they can be viewed in real time on the application page.
+
+As the application is running, the plots can be viewed in http://masterIP:8080/app/?appId=app-XXXXXXXXX-XXX
+You should modify the *spark-defaults.conf* the following way:
+
+```
+spark.moquette.port 1883
+spark.moquette.websocket_port 8888
+```
+
+In the *metrics.properties* of every worker you should add the following entries:
+
+```
+executor.sink.mqtt.class=org.apache.spark.metrics.sink.MQTTSink
+executor.sink.mqtt.pollPeriod = 1
+executor.sink.mqtt.host = masterIP
+executor.sink.mqtt.port = 1883
+executor.sink.mqtt.unit = seconds
+```
+Where executor.sink.mqtt.port is the same as spark.moquette.port and masterIP is the host where Spark Master is running
+
 **Event and UI configuration**
 
 Start history server
