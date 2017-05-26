@@ -160,6 +160,17 @@
 # Unit of the polling period for the Slf4jSink
 #*.sink.slf4j.unit=minutes
 
+# executor.sink.hdfs.class=org.apache.spark.metrics.sink.HDFSSink
+# executor.sink.hdfs.pollPeriod = 5
+# executor.sink.hdfs.dir = hdfs://namenode:9000/custom-metrics
+# executor.sink.hdfs.unit = seconds
+
+# executor.sink.mqtt.class=org.apache.spark.metrics.sink.MQTTSink
+# executor.sink.mqtt.pollPeriod = 5
+# executor.sink.mqtt.host = masterIP
+# executor.sink.mqtt.port = 1883
+# executor.sink.mqtt.unit = seconds
+
 # Enable JvmSource for instance master, worker, driver and executor
 #master.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
@@ -168,3 +179,5 @@
 #driver.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
 #executor.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
+#executor.source.jvm.class=org.apache.spark.metrics.source.SigarSource
