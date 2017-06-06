@@ -106,7 +106,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
           </select>
           <div id="executor-metrics"></div>
       </div>
-      <script src={UIUtils.prependBaseUri("/static/websocket-test.js")}></script>
+      <script src={UIUtils.prependBaseUri("/static/realtime-plots.js")}></script>
 
       <div class="row-fluid"> <!-- Executors -->
         <div class="span12">

@@ -1,7 +1,7 @@
 var appId = ($("#realtime-info").attr("data-appId"));
 var mqttPort = ($("#realtime-info").attr("data-mqttPort"));
 
-var client = new Paho.MQTT.Client("localhost", Number(mqttPort), "webclient-"+appId);
+var client = new Paho.MQTT.Client(window.location.hostname, Number(mqttPort), "webclient-"+appId);
 var firstEntry;
 var realtimeData = [];
 var metricToDisplay;
