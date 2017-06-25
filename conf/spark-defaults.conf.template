@@ -24,6 +24,8 @@
 # spark.eventLog.dir               hdfs://namenode:8021/directory
 # spark.history.fs.logDirectory
 # spark.hdfs.metrics.dir           hdfs://namenode:8021/custom-metrics
+# spark.moquette.port 1883
+# spark.moquette.websocket_port 8888
 # spark.serializer                 org.apache.spark.serializer.KryoSerializer
 # spark.driver.memory              5g
 # spark.executor.extraJavaOptions  -XX:+PrintGCDetails -Dkey=value -Dnumbers="one two three"

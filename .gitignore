@@ -87,3 +87,5 @@ spark-warehouse/
 *.Rproj.*
 
 .Rproj.user
+
+moquette_store.mapdb*

@@ -180,6 +180,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/d3.min.js")}></script>
     <script src={prependBaseUri("/static/metricsgraphics.min.js")}></script>
     <script src={prependBaseUri("/static/sigar-viz.js")}></script>
+    <script src={prependBaseUri("/static/mqttws31.min.js")}></script>
     <script>setUIRoot('{UIUtils.uiRoot}')</script>
   }
 

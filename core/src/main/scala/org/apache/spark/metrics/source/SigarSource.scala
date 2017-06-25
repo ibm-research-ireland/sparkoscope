@@ -26,149 +26,98 @@ import org.slf4j.LoggerFactory
 private[spark] class SigarSource() extends Source {
   override def sourceName: String = "sigar"
 
-  var LOGGER = LoggerFactory.getLogger(classOf[SigarSource]);
+  override val metricRegistry: MetricRegistry = new MetricRegistry
 
-  override val metricRegistry: MetricRegistry = new MetricRegistry()
+  val LOGGER = LoggerFactory.getLogger(classOf[SigarSource])
+  val sigar = new Sigar
+
+  def pid : Long = sigar.getPid
+
+  register(metricRegistry, new StatefulMetric {
+    override val name = "network.sent_per_second"
+    override def momentaryValue : Long = networkMetrics().bytesTx
+  })
+
+  register(metricRegistry, new StatefulMetric {
+    override val name = "network.received_per_second"
+    override def momentaryValue : Long = networkMetrics.bytesRx
+  })
+
+  register(metricRegistry, new StatefulMetric {
+    override val name = "disk.written_per_second"
+    override def momentaryValue : Long = diskMetrics.bytesWritten
+  })
+
+  register(metricRegistry, new StatefulMetric {
+    override val name = "disk.read_per_second"
+    override def momentaryValue : Long = diskMetrics.bytesRead
+  })
+
+  register(metricRegistry, new Metric[Double] {
+    override def name : String = "cpu.host.count"
+    override def value : Int = sigar.getCpuInfoList.length
+  })
+
+  register(metricRegistry, new StatefulMetric {
+    override val name = "cpu.host.sys"
+    override def momentaryValue : Long = sigar.getCpu.getSys
+  })
+
+  register(metricRegistry, new StatefulMetric {
+    override val name = "cpu.host.user"
+    override def momentaryValue : Long = sigar.getCpu.getUser
+  })
+
+  register(metricRegistry, new StatefulMetric {
+    override val name = "cpu.host.wait"
+    override def momentaryValue : Long = sigar.getCpu.getWait
+  })
+
+  register(metricRegistry, new StatefulMetric {
+    override val name = "cpu.host.total"
+    override def momentaryValue : Long = sigar.getCpu.getTotal
+  })
+
+  register(metricRegistry, new StatefulMetric {
+    override val name = "cpu.process.sys"
+    override def momentaryValue : Long = sigar.getProcCpu(pid).getSys
+  })
+
+  register(metricRegistry, new StatefulMetric {
+    override val name = "cpu.process.user"
+    override def momentaryValue : Long = sigar.getProcCpu(pid).getUser
+  })
+
+  register(metricRegistry, new StatefulMetric {
+    override val name = "cpu.process.total"
+    override def momentaryValue : Long = sigar.getProcCpu(pid).getTotal
+  })
+
+  register(metricRegistry, new Metric[Long] {
+    override def name : String = "memory.host.total"
+    override def value : Long = sigar.getMem.getTotal
+  })
+
+  register(metricRegistry, new Metric[Long] {
+    override def name : String = "memory.host.used"
+    override def value : Long = sigar.getMem.getUsed
+  })
+
+  register(metricRegistry, new Metric[Long] {
+    override def name : String = "memory.host.free"
+    override def value : Long = sigar.getMem.getFree
+  })
+
+  register(metricRegistry, new Metric[Long] {
+    override def name : String = "memory.process.total"
+    override def value : Long = sigar.getProcMem(pid).getSize
+  })
 
   case class NetworkMetrics(bytesRx: Long, bytesTx: Long)
+
   case class DiskMetrics(bytesWritten: Long, bytesRead: Long)
 
-  val sigar = new Sigar()
-
-  var initialNetworkMetrics: NetworkMetrics = getNetworkMetrics()
-  var initialDiskMetrics: DiskMetrics = getDiskMetrics()
-
-  var previousBytesTxCalculation: Long = new Date().getTime
-  var previousBytesTx: Long = initialNetworkMetrics.bytesTx
-  var previousBytesTxMeasurement: Double = 0.0
-
-  var previousBytesRxCalculation: Long = new Date().getTime
-  var previousBytesRx: Long = initialNetworkMetrics.bytesRx
-  var previousBytesRxMeasurement: Double = 0.0
-
-  var previousBytesWrittenCalculation: Long = new Date().getTime
-  var previousBytesWritten: Long = initialDiskMetrics.bytesWritten
-  var previousBytesWrittenMeasurement: Double = 0.0
-
-  var previousBytesReadCalculation: Long = new Date().getTime
-  var previousBytesRead: Long = initialDiskMetrics.bytesRead
-  var previousBytesReadMeasurement: Double = 0.0
-
-  metricRegistry.register(MetricRegistry.name("sigar.kBytesTxPerSecond"), new Gauge[Double] {
-    override def getValue: Double = {
-      val currentMetrics: NetworkMetrics = getNetworkMetrics()
-      val currentDate: Long = new Date().getTime
-      val currentBytesTx: Long = currentMetrics.bytesTx
-
-      if (currentDate - previousBytesTxCalculation < 10000) previousBytesTxMeasurement / 1000.0
-      else {
-        val diffSeconds = (currentDate - previousBytesTxCalculation) / 1000.0
-        val diffBytes = currentBytesTx - previousBytesTx
-
-        previousBytesTxCalculation = currentDate
-        previousBytesTx = currentBytesTx
-
-        if (diffBytes == 0) previousBytesTxMeasurement = 0.0
-        else previousBytesTxMeasurement = diffBytes / diffSeconds
-
-        previousBytesTxMeasurement / 1000.0
-      }
-    }
-  })
-
-  metricRegistry.register(MetricRegistry.name("sigar.kBytesRxPerSecond"), new Gauge[Double] {
-    override def getValue: Double = {
-      val currentMetrics: NetworkMetrics = getNetworkMetrics()
-      val currentDate: Long = new Date().getTime
-      val currentBytesRx: Long = currentMetrics.bytesRx
-
-      if (currentDate - previousBytesRxCalculation < 10000) previousBytesRxMeasurement / 1000.0
-      else {
-        val diffSeconds = (currentDate - previousBytesRxCalculation) / 1000.0;
-        val diffBytes = currentBytesRx - previousBytesRx
-
-        previousBytesRxCalculation = currentDate
-        previousBytesRx = currentBytesRx
-
-        if (diffBytes == 0) previousBytesRxMeasurement = 0.0
-        else previousBytesRxMeasurement = diffBytes / diffSeconds
-
-        previousBytesRxMeasurement / 1000.0
-      }
-    }
-  })
-
-  metricRegistry.register(MetricRegistry.name("sigar.kBytesWrittenPerSecond"), new Gauge[Double] {
-    override def getValue: Double = {
-      val currentMetrics: DiskMetrics = getDiskMetrics()
-      val currentDate: Long = new Date().getTime
-      val currentBytesWritten: Long = currentMetrics.bytesWritten
-
-      if (currentDate - previousBytesWrittenCalculation < 10000) {
-        previousBytesWrittenMeasurement / 1000.0
-      } else {
-        val diffSeconds = (currentDate - previousBytesWrittenCalculation) / 1000.0;
-        val diffBytes = currentBytesWritten - previousBytesWritten
-
-        previousBytesWrittenCalculation = currentDate
-        previousBytesWritten = currentBytesWritten
-
-        if (diffBytes == 0) previousBytesWrittenMeasurement = 0.0
-        else previousBytesWrittenMeasurement = diffBytes / diffSeconds;
-
-        previousBytesWrittenMeasurement / 1000.0
-      }
-    }
-  })
-
-  metricRegistry.register(MetricRegistry.name("sigar.kBytesReadPerSecond"), new Gauge[Double] {
-    override def getValue: Double = {
-      val currentMetrics: DiskMetrics = getDiskMetrics()
-      val currentDate: Long = new Date().getTime
-      val currentBytesRead: Long = currentMetrics.bytesRead
-
-      if (currentDate - previousBytesReadCalculation < 10000) previousBytesReadMeasurement / 1000.0
-      else {
-        val diffSeconds = (currentDate - previousBytesReadCalculation) / 1000.0;
-        val diffBytes = currentBytesRead - previousBytesRead
-
-        previousBytesReadCalculation = currentDate
-        previousBytesRead = currentBytesRead
-
-        if (diffBytes == 0) previousBytesReadMeasurement = 0.0
-        else previousBytesReadMeasurement = diffBytes / diffSeconds;
-
-        previousBytesReadMeasurement / 1000.0
-      }
-    }
-  })
-
-  metricRegistry.register(MetricRegistry.name("sigar.cpu"), new Gauge[Double] {
-    override def getValue: Double = {
-      try {
-      sigar.getCpuPerc.getCombined*100.0
-      } catch {
-        case e: Exception =>
-          e.printStackTrace()
-          LOGGER.error("Sigar couldn't get cpu utilization, error: " + e.getMessage)
-          0.0
-      }
-    }
-  })
-
-  metricRegistry.register(MetricRegistry.name("sigar.ram"), new Gauge[Double] {
-    override def getValue: Double = {
-      try {
-      sigar.getMem.getUsedPercent
-      } catch {
-        case e: Exception =>
-          LOGGER.error("Sigar couldn't get memory utilization, error: " + e.getMessage)
-          0.0
-      }
-    }
-  });
-
-  def getNetworkMetrics(): NetworkMetrics = {
+  def networkMetrics(): NetworkMetrics = {
     var bytesReceived = 0L
     var bytesTransmitted = 0L
 
@@ -180,14 +129,14 @@ private[spark] class SigarSource() extends Source {
         bytesTransmitted += netInterfaceStat.getTxBytes
       } catch {
         case e: Exception =>
-          LOGGER.error("Sigar couldn't get network metrics for interface " +interface +", error: "
-            + e.getMessage)
+          LOGGER.error("Sigar couldn't get network metrics for interface " +interface +
+            ", error: " + e.getMessage)
       }
     })
     NetworkMetrics(bytesReceived, bytesTransmitted)
   }
 
-  def getDiskMetrics(): DiskMetrics = {
+  def diskMetrics(): DiskMetrics = {
     var bytesWritten = 0L
     var bytesRead = 0L
 
@@ -204,11 +153,42 @@ private[spark] class SigarSource() extends Source {
         }
       } catch {
         case e: Exception =>
-          LOGGER.error("Sigar couldn't get filesystem usage for filesystem "
-            +fileSystem.getDevName +" mounted at "
-            +fileSystem.getDirName +", error: " + e.getMessage)
+          LOGGER.error("Sigar couldn't get filesystem usage for filesystem " +
+            fileSystem.getDevName +" mounted at " +fileSystem.getDirName +", error: " +
+            e.getMessage)
       }
     })
     DiskMetrics(bytesWritten, bytesRead)
+  }
+
+  def register[T](registry: MetricRegistry, metric: Metric[T]) : Gauge[T] =
+  {metricRegistry.register(metric.name, metric.gauge)}
+
+  trait Metric[T] {
+    def value: T
+    def name: String
+
+    def gauge: Gauge[T] = new Gauge[T] {
+      override def getValue = value
+    }
+  }
+
+  trait StatefulMetric extends Metric[Float] {
+    var lastProbeTimestamp: Long = System.currentTimeMillis
+    var lastValue: Float = momentaryValue
+
+    def value : Float = synchronized {
+      val now = System.currentTimeMillis
+      val timeWindowInSec = (now - lastProbeTimestamp) / 1000f
+      lastProbeTimestamp = now
+
+      val newValue = momentaryValue
+      val valueDiff = newValue - lastValue
+      lastValue = newValue
+
+      valueDiff / timeWindowInSec
+    }
+
+    def momentaryValue: Float
   }
 }

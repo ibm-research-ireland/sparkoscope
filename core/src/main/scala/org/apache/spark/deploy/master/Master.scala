@@ -18,11 +18,13 @@
 package org.apache.spark.deploy.master
 
 import java.text.SimpleDateFormat
-import java.util.{Date, Locale}
+import java.util.{Arrays, Date, Locale, Properties}
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
+
+import io.moquette.server.Server
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription,
@@ -178,6 +180,19 @@ private[deploy] class Master(
     }
     persistenceEngine = persistenceEngine_
     leaderElectionAgent = leaderElectionAgent_
+
+    ThreadUtils.runInNewThread("moquette-server") {
+
+      val properties = new Properties
+      val mqttBroker: Server = new Server
+
+      properties.setProperty("port", conf.get("spark.moquette.port"))
+      properties.setProperty("websocket_port", conf.get("spark.moquette.websocket_port"))
+      properties.setProperty("host", "0.0.0.0")
+      properties.setProperty("allow_anonymous", "true")
+
+      mqttBroker.startServer(properties)
+    }
   }
 
   override def onStop() {

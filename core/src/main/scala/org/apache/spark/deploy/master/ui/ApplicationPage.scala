@@ -30,6 +30,7 @@ import org.apache.spark.util.Utils
 private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
 
   private val master = parent.masterEndpointRef
+  private val mqttPort = parent.master.conf.get("spark.moquette.websocket_port")
 
   /** Executor details for a particular application */
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -96,6 +97,16 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
           </ul>
         </div>
       </div>
+
+      <div id="realtime-info" data-appId={app.id} data-mqttPort={mqttPort}></div>
+      <div id="executor-parent">
+          <label><b>Executor Metrics:</b></label>
+          <select id="executor-metric-option">
+            <option value="NULL">-- Select --</option>
+          </select>
+          <div id="executor-metrics"></div>
+      </div>
+      <script src={UIUtils.prependBaseUri("/static/realtime-plots.js")}></script>
 
       <div class="row-fluid"> <!-- Executors -->
         <div class="span12">
