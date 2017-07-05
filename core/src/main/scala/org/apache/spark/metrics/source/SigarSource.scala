@@ -35,62 +35,62 @@ private[spark] class SigarSource() extends Source {
 
   register(metricRegistry, new StatefulMetric {
     override val name = "network.sent_per_second"
-    override def momentaryValue : Long = networkMetrics().bytesTx
+    override def momentaryValue : Float = networkMetrics().bytesTx
   })
 
   register(metricRegistry, new StatefulMetric {
     override val name = "network.received_per_second"
-    override def momentaryValue : Long = networkMetrics.bytesRx
+    override def momentaryValue : Float = networkMetrics().bytesRx
   })
 
   register(metricRegistry, new StatefulMetric {
     override val name = "disk.written_per_second"
-    override def momentaryValue : Long = diskMetrics.bytesWritten
+    override def momentaryValue : Float = diskMetrics.bytesWritten
   })
 
   register(metricRegistry, new StatefulMetric {
     override val name = "disk.read_per_second"
-    override def momentaryValue : Long = diskMetrics.bytesRead
+    override def momentaryValue : Float = diskMetrics.bytesRead
   })
 
   register(metricRegistry, new Metric[Double] {
     override def name : String = "cpu.host.count"
-    override def value : Int = sigar.getCpuInfoList.length
+    override def value : Double = sigar.getCpuInfoList.length
   })
 
   register(metricRegistry, new StatefulMetric {
     override val name = "cpu.host.sys"
-    override def momentaryValue : Long = sigar.getCpu.getSys
+    override def momentaryValue : Float = sigar.getCpu.getSys
   })
 
   register(metricRegistry, new StatefulMetric {
     override val name = "cpu.host.user"
-    override def momentaryValue : Long = sigar.getCpu.getUser
+    override def momentaryValue : Float = sigar.getCpu.getUser
   })
 
   register(metricRegistry, new StatefulMetric {
     override val name = "cpu.host.wait"
-    override def momentaryValue : Long = sigar.getCpu.getWait
+    override def momentaryValue : Float = sigar.getCpu.getWait
   })
 
   register(metricRegistry, new StatefulMetric {
     override val name = "cpu.host.total"
-    override def momentaryValue : Long = sigar.getCpu.getTotal
+    override def momentaryValue : Float = sigar.getCpu.getTotal
   })
 
   register(metricRegistry, new StatefulMetric {
     override val name = "cpu.process.sys"
-    override def momentaryValue : Long = sigar.getProcCpu(pid).getSys
+    override def momentaryValue : Float = sigar.getProcCpu(pid).getSys
   })
 
   register(metricRegistry, new StatefulMetric {
     override val name = "cpu.process.user"
-    override def momentaryValue : Long = sigar.getProcCpu(pid).getUser
+    override def momentaryValue : Float = sigar.getProcCpu(pid).getUser
   })
 
   register(metricRegistry, new StatefulMetric {
     override val name = "cpu.process.total"
-    override def momentaryValue : Long = sigar.getProcCpu(pid).getTotal
+    override def momentaryValue : Float = sigar.getProcCpu(pid).getTotal
   })
 
   register(metricRegistry, new Metric[Long] {
