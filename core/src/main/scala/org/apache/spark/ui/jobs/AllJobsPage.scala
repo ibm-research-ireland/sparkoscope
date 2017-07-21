@@ -29,6 +29,7 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonDSL._
+import org.slf4j.LoggerFactory
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.scheduler._
@@ -372,7 +373,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           val jobId = jobStage._1.jobId
           val stageId = jobStage._2
           val stageInfo = parent.jobProgresslistener.stageIdToInfo.get(stageId)
-          (jobId, stageInfo.get.name, stageInfo.get.submissionTime.get)
+          (jobId, stageInfo.get.name, stageInfo.get.submissionTime.getOrElse(new Date().getTime))
         })
         .map(job =>
           compact(
