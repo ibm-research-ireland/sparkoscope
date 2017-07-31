@@ -27,7 +27,7 @@ In all the nodes of the cluster Hyperic Sigar library must be installed.
 Download from [http://sourceforge.net/projects/sigar/files/sigar/1.6/hyperic-sigar-1.6.4.zip/download](http://sourceforge.net/projects/sigar/files/sigar/1.6/hyperic-sigar-1.6.4.zip/download).
 Extract the zip in any location.
 
-In spark-envh.sh you need to add to LD_LIBRARY_PATH variable the directory of the native libraries of Sigar. For instance:
+In spark-env.sh you need to add to LD_LIBRARY_PATH variable the directory of the native libraries of Sigar. For instance:
 
 ```
 LD_LIBRARY_PATH=/path/to/hyperic-sigar-1.6.4/sigar-bin/lib/:$LD_LIBRARY_PATH
