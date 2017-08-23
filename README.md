@@ -31,6 +31,8 @@ In spark-env.sh you need to add to LD_LIBRARY_PATH variable the directory of the
 
 ```
 LD_LIBRARY_PATH=/path/to/hyperic-sigar-1.6.4/sigar-bin/lib/:$LD_LIBRARY_PATH
+#In case you plan to use Sparkoscope on Yarn
+SPARK_YARN_USER_ENV="LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 ```
 
 Add the source definition to *metrics.properties*
